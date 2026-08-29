@@ -108,6 +108,24 @@ For the cases a probe hit, the history is read for the things no filter covers:
 
 Turn this pass off with `READ_TIMELINES: false` if you want a faster run.
 
+## How much gets reported
+
+A report of two thousand findings is not a report. Only what needs somebody to **act
+today** is listed case by case; everything else is counted.
+
+| | |
+|---|---|
+| **Listed, one line per case** | severity **high and critical** only, and each case contributes its **worst issue only** |
+| **Counted, not listed** | normal states — waiting on an intake form, a client yet to approve, an audit two days old, a weak verdict. Real, but not failures |
+| **Hard cap** | 60 lines, so the report is always readable |
+
+On a realistic load this turns roughly 1,900 raw findings into **60 listed items** and a
+short count table. Tighten further with `ITEMISE_FROM: "critical"`, or loosen with
+`MAX_PER_CASE` and `MAX_ITEMISED`.
+
+Every listed line carries the case's own detail — hours in the stage, who holds it — so
+no two lines read the same and each can be judged on its own.
+
 ## Reviewer sign-off is deliberately not checked
 
 Petition Studio has **no "reviewer approved" action**, so no field carries that meaning.
@@ -164,18 +182,14 @@ exists as a HubSpot user. Nothing needs typing beyond the name and the role.
 
 | Role | People |
 |---|---|
-| Petition Writer | Aleena Najeeb · Umme Aimon · Tahir Khalil · Kushra Leigh Price · Faryal Khalid · Aliza Ejaz · Samra Goraya |
-| Petition Writer **and Reviewer** | Fatima Khalid · Samina Naseer |
+| Petition Writer | Aleena Najeeb · Umme Aimon · Tahir Khalil · Kushra Leigh Price · Faryal Khalid · Fatima Khalid · Aliza Ejaz · Samra Goraya · Samina Naseer |
+
 | Brainstorm Specialist | Kysha d'Abdon |
 | Petition Writer, **in training** | Stella · Sashalene Vas Vas · Yvette · Neline Van Zyl |
 
 Spellings were verified against HubSpot and several differed from the original list:
 **Aleena Najeeb** (not Najeed), **Kysha d'Abdon**, **Kushra Leigh Price**,
 **Sashalene Vas Vas**, **Neline Van Zyl**.
-
-**Two people hold both roles.** Fatima Khalid and Samina Naseer write and review, which
-is exactly where the independence check matters — a case with either of them as writer
-*and* reviewer has not been independently reviewed.
 
 **Writers in training** have their quality, control and document findings **raised one
 level**, because their work is meant to be watched more closely while they train. The
