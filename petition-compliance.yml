@@ -1,0 +1,71 @@
+name: Petition Studio Compliance
+
+on:
+  schedule:
+    # 06:30 UTC = 11:30 AM PKT, daily.
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "What to run"
+        required: true
+        type: choice
+        default: "Compliance check"
+        options:
+          - "Compliance check"
+          - "Discover the API shape (run this first)"
+      dry_run:
+        description: "Dry run (report to the log and artifact, send no email)?"
+        required: true
+        type: choice
+        default: "true"
+        options:
+          - "true"
+          - "false"
+      limit:
+        description: "How many cases to check"
+        required: true
+        type: choice
+        default: "all"
+        options:
+          - "all"
+          - "25"
+          - "50"
+          - "100"
+          - "250"
+      report_to:
+        description: "Who receives the report"
+        required: true
+        default: "razaali@hofmigration.com"
+        type: string
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Check the compliance rules still work
+        run: node selftest.js
+      - name: Discover the API shape
+        if: ${{ inputs.mode == 'Discover the API shape (run this first)' }}
+        run: node discover.js
+        env:
+          PETITION_API_KEY: ${{ secrets.PETITION_API_KEY }}
+      - name: Compliance check
+        if: ${{ inputs.mode != 'Discover the API shape (run this first)' }}
+        run: node petition-compliance.js
+        env:
+          PETITION_API_KEY: ${{ secrets.PETITION_API_KEY }}
+          RESEND_KEY: ${{ secrets.RESEND_KEY }}
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+          LIMIT_INPUT: ${{ inputs.limit }}
+          REPORT_TO: ${{ inputs.report_to }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: petition-compliance-report
+          path: petition-compliance-report.html

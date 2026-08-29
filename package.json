@@ -1,0 +1,9 @@
+{
+  "name": "petition-studio-compliance",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Daily compliance for HOF Petition Studio (read-only Case History API).",
+  "type": "commonjs",
+  "engines": { "node": ">=18" },
+  "scripts": { "start": "node petition-compliance.js", "discover": "node discover.js", "test": "node selftest.js" }
+}
