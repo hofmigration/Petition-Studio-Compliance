@@ -157,11 +157,45 @@ async function main() {
 
   // de-duplicate identical findings on the same case
   const seen = new Set();
-  const unique = findings.filter((f) => {
+  let all = findings.filter((f) => {
     const k = `${f.caseId}|${f.problem}`;
     if (seen.has(k)) return false; seen.add(k); return true;
   });
-  unique.sort((a, b) => (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9));
+
+  // ---------------------------------------------------------------------
+  // TRIM IT DOWN TO WHAT SOMEBODY CAN ACTUALLY ACT ON
+  // A report of two thousand lines gets ignored, which is worse than no report.
+  //   - routine states are COUNTED, not listed
+  //   - anything below the threshold is COUNTED, not listed
+  //   - each case contributes its WORST issue only
+  //   - a hard cap keeps the list readable no matter what
+  // ---------------------------------------------------------------------
+  const INFORMATIONAL = new Set(PROBES.filter((p) => p.informational).map((p) => p.problem.split(" — ")[0]));
+  const threshold = RANK[SETTINGS.ITEMISE_FROM] ?? 1;
+  const counted = {};
+  const countIt = (f) => { const k = f.problem.split(" — ")[0]; counted[k] = (counted[k] || 0) + 1; };
+
+  const actionable = [];
+  for (const f of all) {
+    const routine = [...INFORMATIONAL].some((p) => f.problem.startsWith(p));
+    if (routine || (RANK[f.severity] ?? 9) > threshold) { countIt(f); continue; }
+    actionable.push(f);
+  }
+
+  // worst issue per case only
+  actionable.sort((a, b) => (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9));
+  const perCase = new Map();
+  const itemised = [];
+  for (const f of actionable) {
+    const n = perCase.get(f.caseId) || 0;
+    if (n >= SETTINGS.MAX_PER_CASE) { countIt(f); continue; }
+    perCase.set(f.caseId, n + 1);
+    itemised.push(f);
+  }
+
+  const overflow = itemised.length - SETTINGS.MAX_ITEMISED;
+  const unique = itemised.slice(0, SETTINGS.MAX_ITEMISED);
+  if (overflow > 0) counted[`${overflow} further case(s) over the reporting limit`] = overflow;
 
   // pipeline snapshot from every live case, not just the flagged ones
   let byStatus = {};
@@ -181,22 +215,30 @@ async function main() {
   const desc = (o) => Object.entries(o).sort((a, b) => b[1] - a[1]);
   const scanned = Object.values(byStatus).reduce((a, b) => a + b, 0) || entries.length;
   console.log(`\n===== SUMMARY =====`);
-  console.log(`Live cases ${scanned} | cases with findings ${entries.length} | findings ${unique.length}`);
+  console.log(`Live cases ${scanned} | cases with something flagged ${entries.length}`);
+  console.log(`Raw findings ${all.length}  ->  LISTED ${unique.length} (worst issue per case, ${SETTINGS.ITEMISE_FROM} and above)`);
+  const countedTotal = Object.values(counted).reduce((a, b) => a + b, 0);
+  if (countedTotal) {
+    console.log(`\nCounted, not listed (${countedTotal}):`);
+    for (const [k, n] of Object.entries(counted).sort((a, b) => b[1] - a[1]).slice(0, 15))
+      console.log(`  ${String(n).padStart(5)}  ${k}`);
+  }
   console.log(`\nBy severity:`); for (const [s, n] of desc(bySev)) console.log(`  ${String(n).padStart(4)}  ${s}`);
   console.log(`\nBy type:`);     for (const [a, n] of desc(byArea)) console.log(`  ${String(n).padStart(4)}  ${a}`);
   console.log(`\nBy owner:`);    for (const [o, n] of desc(byOwner)) console.log(`  ${String(n).padStart(4)}  ${o}`);
+
 
   const crit = unique.filter((f) => f.severity === "critical");
   if (crit.length) {
     console.log(`\nCRITICAL (${crit.length}):`);
     for (const f of crit.slice(0, 25)) console.log(`  ${f.owner} — ${f.caseName}\n     ${f.problem}\n     ${caseLink(f.caseId)}`);
   }
-  console.log(`\nSample (first 20):`);
-  for (const f of unique.slice(0, 20))
+  console.log(`\nTHE LIST (${unique.length}):`);
+  for (const f of unique)
     console.log(`\n• [${f.severity}] ${f.caseName} (${f.stage}) — ${f.owner}\n  ${f.problem}\n  -> ${f.action}`);
 
   // ---- report ----
-  const html = buildReport({ findings: unique, scanned, byStatus, dryRun: SETTINGS.DRY_RUN });
+  const html = buildReport({ findings: unique, counted, scanned, byStatus, dryRun: SETTINGS.DRY_RUN });
   require("fs").writeFileSync("petition-compliance-report.html", html);
   console.log(`\nWrote petition-compliance-report.html (download it from this run's Artifacts).`);
 
