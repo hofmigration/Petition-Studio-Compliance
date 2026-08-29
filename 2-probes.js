@@ -9,6 +9,20 @@ const { listCases } = require("./0-api");
 
 const RANK = { critical: 0, high: 1, medium: 2, low: 3 };
 
+// The same probe fires on many cases, so a static sentence would repeat all down the
+// report. Each finding is given the case's own detail — how long it has sat, who holds
+// it — so every line reads differently and can be judged on its own.
+function contextualise(probe, c) {
+  const stageObj = c.stage || {};
+  const hours = Number(stageObj.age_hours);
+  const days = Number(stageObj.age_days);
+  const bits = [];
+  if (Number.isFinite(hours) && hours > 0) bits.push(`${hours}h in ${c.status || "this stage"}`);
+  else if (Number.isFinite(days) && days > 0) bits.push(`${days}d in ${c.status || "this stage"}`);
+  else if (c.status) bits.push(`at ${c.status}`);
+  return bits.length ? `${probe.problem} — ${bits.join(", ")}` : probe.problem;
+}
+
 async function runProbes(log = console.log) {
   const found = new Map();     // caseId -> { case, hits: [] }
   const perProbe = {};
@@ -32,7 +46,7 @@ async function runProbes(log = console.log) {
       if (probe.area === "quality" && LATE_STAGES.includes(c.status)) {
         severity = severity === "high" ? "critical" : "high";
       }
-      found.get(id).hits.push({ ...probe, severity });
+      found.get(id).hits.push({ ...probe, severity, problem: contextualise(probe, c) });
     }
   }
 
