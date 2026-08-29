@@ -20,39 +20,51 @@ function rows(items) {
   })).join("");
 }
 
-function buildReport({ findings, scanned, byStatus, dryRun }) {
-  const group = (area) => findings.filter((f) => area.includes(f.area)).sort((a, b) => (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9));
-  const controls = group(["control", "assign", "sequence"]);
-  const slas = group(["sla"]);
-  const chases = group(["chase", "documents"]);
-  const stalled = group(["stalled"]);
-  const other = group(["notify", "unknown"]);
+function buildReport({ findings, counted, scanned, byStatus, dryRun }) {
+  const itemised = findings;                       // already filtered and capped by the runner
+  const group = (area) => itemised.filter((f) => area.includes(f.area))
+    .sort((a, b) => (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9));
 
-  const criticals = findings.filter((f) => f.severity === "critical").length;
-  const pipeline = Object.entries(byStatus).sort((a, b) => b[1] - a[1])
-    .map(([s, n]) => [`${STATUS_SLA[s]?.phase || s}`, String(n)]);
+  const controls = group(["control", "assign", "sequence"]);
+  const quality  = group(["quality", "documents"]);
+  const timing   = group(["sla", "stalled", "chase"]);
+  const other    = group(["notify", "unknown"]);
+  const criticals = itemised.filter((f) => f.severity === "critical").length;
 
   const section = (title, list) => (list.length ? T.sectionTitle(`${title} — ${list.length}`) + rows(list) : "");
+
+  // everything not worth a line of its own, as counts
+  const rest = Object.entries(counted || {}).sort((a, b) => b[1] - a[1]);
+  const restTable = rest.length
+    ? T.sectionTitle("Everything else, by count") +
+      T.paragraph("These are normal states, not failures. They are here so nothing is hidden, but they do not need action today.", 13) +
+      T.table(["Situation", "Cases"], rest.map(([k, n]) => [T.esc(k), String(n)]))
+    : "";
+
+  const pipeline = Object.entries(byStatus).sort((a, b) => b[1] - a[1])
+    .map(([s, n]) => [`${STATUS_SLA[s]?.phase || s}`, String(n)]);
 
   const body =
     (dryRun ? T.callout("<strong>DRY RUN / PREVIEW.</strong> This report was not emailed to anyone.", "warn") : "") +
     (criticals
-      ? T.callout(`<strong>${criticals} critical item(s).</strong> Control failures and severe breaches are listed first.`, "alert")
-      : T.callout("No critical items today.", "ok")) +
-    T.paragraph(`<strong>${scanned}</strong> live case(s) checked &middot; <strong>${findings.length}</strong> finding(s).`) +
+      ? T.callout(`<strong>${criticals} case(s) need action today.</strong> These are control failures, listed first.`, "alert")
+      : itemised.length
+        ? T.callout(`<strong>${itemised.length} case(s) need attention.</strong> No control failures today.`, "warn")
+        : T.callout("Nothing needs action today.", "ok")) +
+    T.paragraph(`<strong>${scanned}</strong> live case(s) checked. <strong>${itemised.length}</strong> listed below, one line per case, worst issue only.`) +
     section("Control failures", controls) +
-    section("SLA breaches", slas) +
-    section("Chases due", chases) +
-    section("Stalled cases", stalled) +
+    section("Quality and documents", quality) +
+    section("Running late", timing) +
     section("Other", other) +
-    (findings.length === 0 ? T.paragraph("Nothing flagged today.") : "") +
+    (itemised.length === 0 ? T.paragraph("Nothing reached the reporting threshold today.") : "") +
+    restTable +
     T.sectionTitle("Pipeline by stage") +
     T.table(["Stage", "Cases"], pipeline) +
     T.footer(`Petition Studio &middot; generated ${new Date().toISOString().slice(0, 10)}.`);
 
   return T.shell({
     title: "Petition Studio Compliance",
-    subtitle: `${scanned} live cases &middot; ${findings.length} findings &middot; ${criticals} critical`,
+    subtitle: `${scanned} live cases &middot; ${itemised.length} need action &middot; ${criticals} critical`,
     body,
   });
 }
