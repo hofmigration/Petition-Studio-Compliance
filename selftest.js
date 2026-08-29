@@ -40,8 +40,11 @@ console.log("PETITION STUDIO COMPLIANCE SELF-TEST\n");
 check("the roster has all 14 people", STAFF.length === 14, `got ${STAFF.length}`);
 check("every entry has a name and a role", STAFF.every((p) => p.name && p.role));
 check("the four writers in training are marked", TRAINEES.length === 4, `got ${TRAINEES.length}`);
-check("Fatima Khalid and Samina Naseer are marked as also reviewing",
-  DUAL_ROLE.includes("Fatima Khalid") && DUAL_ROLE.includes("Samina Naseer"));
+check("nobody on the roster holds both writer and reviewer", DUAL_ROLE.length === 0);
+check("Fatima Khalid is a petition writer only",
+  STAFF.find((p) => p.name === "Fatima Khalid")?.role === "petition_writer" && !STAFF.find((p) => p.name === "Fatima Khalid")?.alsoReviewer);
+check("Samina Naseer is a petition writer only",
+  STAFF.find((p) => p.name === "Samina Naseer")?.role === "petition_writer" && !STAFF.find((p) => p.name === "Samina Naseer")?.alsoReviewer);
 check("Kysha is the brainstorm specialist",
   STAFF.find((p) => p.role === "brainstorm_specialist")?.name.startsWith("Kysha"));
 check("roster names are unique", new Set(STAFF.map((p) => p.name.toLowerCase())).size === STAFF.length);
@@ -270,15 +273,47 @@ check("sign-off is never invented from a send-back", (() => {
   return !out.some((i) => /sign.?off|approved/i.test(i.problem));
 })());
 
+// ---- keeping the report short enough to act on ----
+check("only high and above are listed individually", SETTINGS.ITEMISE_FROM === "high");
+check("each case contributes one line at most", SETTINGS.MAX_PER_CASE === 1);
+check("the list is capped", SETTINGS.MAX_ITEMISED > 0 && SETTINGS.MAX_ITEMISED <= 100);
+check("the routine states are counted, not listed", (() => {
+  const info = PROBES.filter((p) => p.informational).map((p) => p.id);
+  return ["intake_awaiting", "approval_waiting", "audit_over_2d", "verdict_weak"].every((x) => info.includes(x));
+})());
+check("the things that need action are never marked informational", (() => {
+  const must = ["brainstorm_overdue", "drafting_escalated", "no_reviewer", "verdict_no_go", "approval_over_week"];
+  return must.every((id) => !PROBES.find((p) => p.id === id)?.informational);
+})());
+check("a realistic load comes down to something readable", (() => {
+  const RANKX = { critical: 0, high: 1, medium: 2, low: 3 };
+  const INFO = new Set(PROBES.filter((p) => p.informational).map((p) => p.problem.split(" — ")[0]));
+  const gen = [];
+  let n = 0;
+  for (const p of PROBES) {
+    const many = p.informational ? 190 : (p.severity === "critical" ? 6 : 40);
+    for (let i = 0; i < many; i++) gen.push({ caseId: `C${n++ % 522}`, severity: p.severity, problem: `${p.problem} — 30h in stage` });
+  }
+  const th = RANKX[SETTINGS.ITEMISE_FROM] ?? 1;
+  const act = gen.filter((f) => ![...INFO].some((p) => f.problem.startsWith(p)) && (RANKX[f.severity] ?? 9) <= th);
+  const per = new Map(); const items = [];
+  for (const f of act.sort((a, b) => (RANKX[a.severity] ?? 9) - (RANKX[b.severity] ?? 9))) {
+    const c = per.get(f.caseId) || 0; if (c >= SETTINGS.MAX_PER_CASE) continue; per.set(f.caseId, c + 1); items.push(f);
+  }
+  return gen.length > 1000 && items.slice(0, SETTINGS.MAX_ITEMISED).length <= SETTINGS.MAX_ITEMISED;
+})());
+
 // ---- report ----
 const html = buildReport({
+  counted: { "Still waiting on the client to submit their intake form": 190, "The petition is with the client and not yet approved": 61 },
   findings: [
     { caseId: "C1", caseName: "Ahmed Khan", stage: "4. Drafting", owner: "Writer Two", severity: "critical", area: "control", problem: "The reviewer and the writer are the same person", action: "assign a different reviewer" },
     { caseId: "C2", caseName: "Sara Ali", stage: "5. Internal Review", owner: "Reviewer Three", severity: "high", area: "sla", problem: "62 working hours in stage, over the 48h SLA", action: "move this case forward" },
   ],
   scanned: 84, byStatus: { ai_drafting: 30, internal_review: 12, intake: 42 }, dryRun: true,
 });
-check("the report renders with its sections", /Control failures/.test(html) && /SLA breaches/.test(html) && /Pipeline by stage/.test(html));
+check("the report renders with its sections", /Control failures/.test(html) && /Running late/.test(html) && /Pipeline by stage/.test(html));
+check("the routine states appear as counts, not as lines", /Everything else, by count/.test(html) && /190/.test(html));
 check("the report links to the dashboard", html.includes("petition.hofmigration.com/dashboard"));
 check("the report escapes text", !/<script/i.test(html));
 
