@@ -27,11 +27,8 @@ const STAFF = [
   { name: "Aliza Ejaz",          role: "petition_writer" },
   { name: "Samra Goraya",        role: "petition_writer" },
 
-  // ---- writers who also review ----
-  // These two hold BOTH roles, which is exactly where the independence check earns its
-  // keep: a case where either of them is writer AND reviewer is not independently reviewed.
-  { name: "Fatima Khalid",       role: "petition_writer", alsoReviewer: true },
-  { name: "Samina Naseer",       role: "petition_writer", alsoReviewer: true },
+  { name: "Fatima Khalid",       role: "petition_writer" },
+  { name: "Samina Naseer",       role: "petition_writer" },
 
   // ---- brainstorm ----
   { name: "Kysha d'Abdon",       role: "brainstorm_specialist" },
@@ -190,45 +187,45 @@ const PROBES = [
 
   // ---- medium: worth attention before it becomes a problem ----
   {
-    id: "audit_over_2d", filter: { audit_age: "over_2d" },
+    id: "audit_over_2d", informational: true, filter: { audit_age: "over_2d" },
     area: "sla", severity: "medium", owner: "processor",
     problem: "The document audit has been open for more than 2 days",
     action: "complete the document audit",
     supersededBy: "audit_over_5d",
   },
   {
-    id: "approval_waiting", filter: { client_approval: "waiting" },
+    id: "approval_waiting", informational: true, filter: { client_approval: "waiting" },
     area: "chase", severity: "medium", owner: "case_manager",
     problem: "The petition is with the client and not yet approved",
     action: "keep the client moving toward approval",
     supersededBy: "approval_over_week",
   },
   {
-    id: "portal_not_activated", filter: { client_portal: "invited_not_activated" },
+    id: "portal_not_activated", informational: true, filter: { client_portal: "invited_not_activated" },
     area: "chase", severity: "medium", owner: "case_manager",
     problem: "The client was invited to the portal but never finished setting it up",
     action: "help the client activate their portal account",
   },
   {
-    id: "brainstorm_unconfirmed", filter: { brainstorm: "awaiting_confirmation" },
+    id: "brainstorm_unconfirmed", informational: true, filter: { brainstorm: "awaiting_confirmation" },
     area: "chase", severity: "medium", owner: "case_manager",
     problem: "A brainstorm time was picked but never confirmed",
     action: "confirm the brainstorm slot with the client",
   },
   {
-    id: "reschedule_requested", filter: { brainstorm: "reschedule_requested" },
+    id: "reschedule_requested", informational: true, filter: { brainstorm: "reschedule_requested" },
     area: "chase", severity: "medium", owner: "case_manager",
     problem: "Somebody asked to move the confirmed brainstorm slot",
     action: "agree a new brainstorm time and confirm it",
   },
   {
-    id: "audit_changes_requested", filter: { audit_state: "changes_requested" },
+    id: "audit_changes_requested", informational: true, filter: { audit_state: "changes_requested" },
     area: "chase", severity: "medium", owner: "processor",
     problem: "The document audit was sent back to the client for changes",
     action: "chase the client for the corrected documents",
   },
   {
-    id: "intake_awaiting", filter: { intake_state: "awaiting" },
+    id: "intake_awaiting", informational: true, filter: { intake_state: "awaiting" },
     area: "chase", severity: "medium", owner: "case_manager",
     problem: "Still waiting on the client to submit their intake form",
     action: "chase the client for the intake form",
@@ -242,7 +239,7 @@ const PROBES = [
     action: "strengthen the case before it goes any further",
   },
   {
-    id: "verdict_weak", filter: { analysis_verdict: "weak" },
+    id: "verdict_weak", informational: true, filter: { analysis_verdict: "weak" },
     area: "quality", severity: "medium", owner: "petition_writer",
     problem: "The case analysis verdict is WEAK, there are real concerns about positioning",
     action: "review the weak points before drafting goes further",
@@ -287,6 +284,19 @@ const SETTINGS = {
 
   // A case with no event at all for this long is stalled, whatever its status.
   STALLED_AFTER_DAYS: 7,
+
+  // ---- HOW MUCH IS REPORTED ----
+  // A report of two thousand findings is not a report. Only things that need somebody
+  // to act TODAY are listed case by case; everything else is counted, not listed.
+  //
+  // ITEMISED: severity at or above this, one line per case.
+  ITEMISE_FROM: "high",          // "critical" for the very shortest report
+  // At most this many findings per case in the itemised list — the worst one only.
+  MAX_PER_CASE: 1,
+  // Hard ceiling on the itemised list, so the report never becomes unreadable.
+  MAX_ITEMISED: 60,
+  // Everything below ITEMISE_FROM is rolled into a count per type.
+  SUMMARISE_THE_REST: true,
 
   // ---- limits ----
   MAX_CASES: (() => { const r = (process.env.LIMIT_INPUT || "all").toLowerCase(); if (!r || r === "all" || r === "0") return 0; const n = parseInt(r, 10); return n > 0 ? n : 0; })(),
