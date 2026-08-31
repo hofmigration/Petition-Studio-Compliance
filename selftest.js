@@ -9,6 +9,7 @@ const { STATUS_SLA, SETTINGS, CHASE, PROBES, LATE_STAGES, STAFF, TRAINEES, DUAL_
 const { qs } = require("./0-api");
 const checkCaseDetail = require("./5-check-case-detail");
 const checkReview = require("./6-check-review");
+const { group, groupSentence } = require("./7-group");
 
 const H = 3600000, D = 86400000, now = Date.now();
 let pass = 0, fail = 0;
@@ -303,17 +304,54 @@ check("a realistic load comes down to something readable", (() => {
   return gen.length > 1000 && items.slice(0, SETTINGS.MAX_ITEMISED).length <= SETTINGS.MAX_ITEMISED;
 })());
 
+// ---- grouping: one problem, not fifty tickets ----
+const mkFindings = (n, owner, problem, sev = "critical") =>
+  Array.from({ length: n }, (_, i) => ({ caseId: `${owner}${i}`, caseName: `Client ${i}`, owner,
+    severity: sev, area: "control", problem, action: "do the thing", ageHours: 40 + i * 5 }));
+
+const bigBacklog = mkFindings(37, "Kysha-Jade Nicholene", "The brainstorm slot has passed and nothing was captured");
+const smallGroup = mkFindings(5, "Fatima Khalid", "The writer asked for a review and no reviewer has responded", "high");
+const isolated = [
+  { caseId: "X1", caseName: "Ahmed", owner: "Aleena Najeeb", severity: "critical", area: "control", problem: "Ready to File with no client approval", action: "capture approval", ageHours: 10 },
+  { caseId: "X2", caseName: "Sara", owner: "Stella", severity: "critical", area: "quality", problem: "Petition missing the endeavour statement", action: "complete it", ageHours: 20 },
+];
+const g1 = group([...bigBacklog, ...smallGroup, ...isolated]);
+
+check("37 identical findings collapse to one escalation", g1.escalations.length === 1 && g1.escalations[0].count === 37);
+check("the escalation names the person", g1.escalations[0].owner === "Kysha-Jade Nicholene");
+check("a group of five is grouped, not escalated", g1.grouped.length === 1 && g1.grouped[0].count === 5);
+check("isolated problems stay individual", g1.singles.length === 2);
+check("44 findings become 4 items", g1.escalations.length + g1.grouped.length + g1.singles.length === 4);
+check("the escalation says it is a backlog", /backlog this size will not clear case by case/.test(groupSentence(g1.escalations[0])));
+check("the escalation reports the oldest wait", /oldest has been waiting \d+ business hours/.test(groupSentence(g1.escalations[0])));
+check("the oldest cases are the ones named", g1.escalations[0].cases[0].ageHours >= g1.escalations[0].cases[1].ageHours);
+check("only a few example cases are named", g1.escalations[0].cases.length <= SETTINGS.CLUSTER_SHOW_CASES);
+check("the rest are counted", g1.escalations[0].moreCases === 37 - SETTINGS.CLUSTER_SHOW_CASES);
+check("the same issue on different people is not merged", (() => {
+  const two = [...mkFindings(6, "Person A", "Same issue"), ...mkFindings(6, "Person B", "Same issue")];
+  const g = group(two);
+  return g.escalations.length === 0 && g.grouped.length === 2;
+})());
+check("different issues for the same person are not merged", (() => {
+  const two = [...mkFindings(6, "Person A", "Issue one"), ...mkFindings(6, "Person A", "Issue two")];
+  const g = group(two);
+  return g.grouped.length === 2;
+})());
+check("three of a kind stay individual", group(mkFindings(3, "Person C", "Rare issue")).singles.length === 3);
+check("nothing in produces nothing out", (() => { const g = group([]); return !g.escalations.length && !g.grouped.length && !g.singles.length; })());
+check("grouping thresholds are sane", SETTINGS.CLUSTER_MIN >= 2 && SETTINGS.ESCALATE_MIN > SETTINGS.CLUSTER_MIN);
+
 // ---- report ----
 const html = buildReport({
-  counted: { "Still waiting on the client to submit their intake form": 190, "The petition is with the client and not yet approved": 61 },
-  findings: [
-    { caseId: "C1", caseName: "Ahmed Khan", stage: "4. Drafting", owner: "Writer Two", severity: "critical", area: "control", problem: "The reviewer and the writer are the same person", action: "assign a different reviewer" },
-    { caseId: "C2", caseName: "Sara Ali", stage: "5. Internal Review", owner: "Reviewer Three", severity: "high", area: "sla", problem: "62 working hours in stage, over the 48h SLA", action: "move this case forward" },
-  ],
-  scanned: 84, byStatus: { ai_drafting: 30, internal_review: 12, intake: 42 }, dryRun: true,
+  ...g1,
+  counted: { "Still waiting on the client to submit their intake form": 190 },
+  scanned: 559, byStatus: { ai_drafting: 30, internal_review: 12, intake: 42 }, dryRun: true,
 });
-check("the report renders with its sections", /Control failures/.test(html) && /Running late/.test(html) && /Pipeline by stage/.test(html));
-check("the routine states appear as counts, not as lines", /Everything else, by count/.test(html) && /190/.test(html));
+check("the report leads with the escalation", /Escalate — a backlog, not a reminder/.test(html));
+check("the report shows the grouped issue", /Grouped — the same issue/.test(html));
+check("the report shows individual cases", /Individual cases/.test(html));
+check("the routine states appear as counts", /Normal states, for information/.test(html) && /190/.test(html));
+check("the escalation sentence is in the report", /backlog this size/.test(html));
 check("the report links to the dashboard", html.includes("petition.hofmigration.com/dashboard"));
 check("the report escapes text", !/<script/i.test(html));
 
