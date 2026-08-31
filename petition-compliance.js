@@ -56,6 +56,8 @@ async function main() {
   console.log(`Roster: ${STAFF.length} people — ${STAFF.filter((p) => p.role === "petition_writer").length} writers (${TRAINEES.length} in training), ${DUAL_ROLE.length} who also review`);
   if (DUAL_ROLE.length) console.log(`  ${DUAL_ROLE.join(" and ")} hold both roles, so the independence check matters most on their cases.`);
   console.log(`Cases on hold are excluded from every check.`);
+  console.log(`Only cases created on or after ${SETTINGS.ONLY_CASES_FROM || "any date"} are listed.`);
+  console.log(`At most ${SETTINGS.MAX_ITEMISED} items are listed; the rest are counted.`);
 
   // ---- pass 1: the probes ----
   console.log(`\nRunning ${PROBES.length} filtered checks...`);
@@ -66,10 +68,29 @@ async function main() {
     console.log(`  ${String(n === undefined ? "-" : n).padStart(5)}  ${p.id.padEnd(26)} [${p.severity}]`);
   }
 
+  // ---- this year only: older cases are historic backlog, counted not listed ----
+  const fromMs = SETTINGS.ONLY_CASES_FROM ? Date.parse(SETTINGS.ONLY_CASES_FROM) : 0;
+  const caseCreated = (c) => {
+    for (const k of ["createdate", "created_at", "created", "intake_reviewed_at", "intro_form_uploaded_at"]) {
+      const t = Date.parse(c[k] || 0);
+      if (t) return t;
+    }
+    return null;
+  };
+  let tooOld = 0;
+
   // scope + closed
   let entries = [...found.values()]
     .filter((e) => !SETTINGS.CLOSED_STATUSES.includes(String(e.case.status || "").toLowerCase()))
-    .filter((e) => inScope(e.case));
+    .filter((e) => inScope(e.case))
+    .filter((e) => {
+      if (!fromMs) return true;
+      const t = caseCreated(e.case);
+      if (t === null) return true;                 // no date on the record: keep it
+      if (t >= fromMs) return true;
+      tooOld++; return false;
+    });
+  if (tooOld) console.log(`Set aside ${tooOld} case(s) created before ${SETTINGS.ONLY_CASES_FROM} — historic backlog.`);
   if (SETTINGS.MAX_CASES) entries = entries.slice(0, SETTINGS.MAX_CASES);
   console.log(`\nCases with at least one finding: ${entries.length}`);
 
@@ -211,6 +232,7 @@ async function main() {
   const overflow = itemised.length - SETTINGS.MAX_ITEMISED;
   const unique = itemised.slice(0, SETTINGS.MAX_ITEMISED);
   if (overflow > 0) counted[`${overflow} further case(s) over the reporting limit`] = overflow;
+  if (tooOld) counted[`Cases created before ${SETTINGS.ONLY_CASES_FROM} (historic backlog)`] = tooOld;
 
   // pipeline snapshot from every live case, not just the flagged ones
   let byStatus = {};
@@ -262,7 +284,12 @@ async function main() {
   }
   if (singles.length) {
     console.log(`\nINDIVIDUAL CASES (${singles.length}):`);
-    for (const f of singles) console.log(`  [${f.severity}] ${f.caseName} — ${f.owner}\n     ${f.problem}\n     -> ${f.action}`);
+    for (const f of singles) {
+      console.log(`  [${f.severity}] ${f.caseName} — ${f.owner}`);
+      console.log(`     Why:   ${f.problem}`);
+      console.log(`     Do:    ${f.action}`);
+      if (f.risk) console.log(`     Avoid: ${f.risk}`);
+    }
   }
 
   const html = buildReport({ escalations, grouped, singles, counted, scanned, byStatus, dryRun: SETTINGS.DRY_RUN });
