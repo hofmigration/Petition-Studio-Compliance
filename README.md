@@ -138,14 +138,26 @@ today** is listed case by case; everything else is counted.
 |---|---|
 | **Listed, one line per case** | severity **high and critical** only, and each case contributes its **worst issue only** |
 | **Counted, not listed** | normal states — waiting on an intake form, a client yet to approve, an audit two days old, a weak verdict. Real, but not failures |
-| **Hard cap** | 60 lines, so the report is always readable |
+| **Hard cap** | **30 items**, so the report is always readable |
+| **This year only** | cases created before **1 January 2026** are historic backlog. Counted, never listed. |
 
-On a realistic load this turns roughly 1,900 raw findings into **60 listed items** and a
-short count table. Tighten further with `ITEMISE_FROM: "critical"`, or loosen with
+Tighten further with `ITEMISE_FROM: "critical"`, or change `ONLY_CASES_FROM`,
 `MAX_PER_CASE` and `MAX_ITEMISED`.
 
-Every listed line carries the case's own detail — hours in the stage, who holds it — so
-no two lines read the same and each can be judged on its own.
+### Every item says three things
+
+| | |
+|---|---|
+| **Why** | what was observed, with the case's own waiting time |
+| **Do** | the specific next action |
+| **Avoid** | what goes wrong if it is left, so the reason is obvious rather than assumed |
+
+For example: *"Avoid drafting from a call nobody captured. The endeavour statement ends
+up built on memory, and the gaps only surface at review when they cost more to fix."*
+
+Group wording is varied and keyed to the owner and issue, so a report with several groups
+does not read as the same sentence repeated — but the same group always reads the same way
+from one day to the next.
 
 ## Reviewer sign-off is deliberately not checked
 
