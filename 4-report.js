@@ -46,17 +46,26 @@ function groupRow(item, i, arr) {
   </div>`;
 }
 
-function buildReport({ escalations = [], grouped = [], singles = [], counted, scanned, byStatus, dryRun }) {
+function buildReport({ escalations = [], grouped = [], singles = [], counted, scanned, byStatus, dryRun, excluded = 0, checked = 0 }) {
   const totalCases = escalations.reduce((a, b) => a + b.count, 0) + grouped.reduce((a, b) => a + b.count, 0) + singles.length;
   const criticals = [...escalations, ...grouped].filter((g) => g.severity === "critical").length + singles.filter((f) => f.severity === "critical").length;
 
   const section = (title, html, n) => (n ? T.sectionTitle(`${title} — ${n}`) + html : "");
 
+  // A green all-clear must mean "we looked and it is clean", never "we did not look".
+  // A filter once set aside every case and this said "nothing needs action today".
+  const nothingChecked = checked === 0 && scanned > 0;
+  const mostlyExcluded = excluded > 0 && scanned > 0 && excluded / scanned > 0.5;
+
   const headline = escalations.length
     ? T.callout(`<strong>${escalations.length} systemic problem(s).</strong> One person is carrying a backlog of the same issue — these will not clear case by case.`, "alert")
     : totalCases
       ? T.callout(`<strong>${totalCases} case(s) need attention.</strong> Nothing systemic today.`, "warn")
-      : T.callout("Nothing needs action today.", "ok");
+      : nothingChecked
+        ? T.callout(`<strong>Nothing was actually checked.</strong> All ${scanned} live case(s) were set aside before any rule ran, so this is not an all-clear. Check the filters in config.js.`, "alert")
+        : mostlyExcluded
+          ? T.callout(`<strong>No findings, but ${excluded} of ${scanned} case(s) were set aside</strong> before the rules ran. Treat this as a partial check, not an all-clear.`, "warn")
+          : T.callout("Nothing needs action today. Every live case was checked and came back clean.", "ok");
 
   const rest = Object.entries(counted || {}).sort((a, b) => b[1] - a[1]);
 
