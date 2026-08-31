@@ -17,6 +17,7 @@ const checkSla = require("./2-check-sla");
 const checkProcess = require("./3-check-process");
 const checkCaseDetail = require("./5-check-case-detail");
 const checkReview = require("./6-check-review");
+const { group, groupSentence } = require("./7-group");
 const { buildReport, sendReport, caseLink } = require("./4-report");
 
 const RANK = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -125,6 +126,10 @@ async function main() {
       const full = details[i];
       if (!full || full.error) return;
       const record = full.case || full.data || full;
+      // real timing, so every finding on this case can say how long it has waited
+      const st = record.stage || {};
+      const h = Number(st.age_hours);
+      if (Number.isFinite(h)) e.ageHours = h;
       let extra = [];
       try { extra = [...checkCaseDetail(record, e.case), ...checkReview(record, e.case)]; }
       catch (err) { console.log(`  detail check error on ${e.case.case_id}: ${err.message}`); }
@@ -136,6 +141,16 @@ async function main() {
         area: iss.area, severity: iss.severity, problem: iss.problem, action: iss.action,
       });
     });
+  }
+
+  // ---- attach the real waiting time to every finding on the case ----
+  {
+    const hoursByCase = new Map();
+    for (const e of entries) if (Number.isFinite(e.ageHours)) hoursByCase.set(e.case.case_id, e.ageHours);
+    for (const f of findings) {
+      const h = hoursByCase.get(f.caseId);
+      if (Number.isFinite(h)) f.ageHours = h;
+    }
   }
 
   // ---- trainee writers: raise their findings a level ----
@@ -233,12 +248,24 @@ async function main() {
     console.log(`\nCRITICAL (${crit.length}):`);
     for (const f of crit.slice(0, 25)) console.log(`  ${f.owner} — ${f.caseName}\n     ${f.problem}\n     ${caseLink(f.caseId)}`);
   }
-  console.log(`\nTHE LIST (${unique.length}):`);
-  for (const f of unique)
-    console.log(`\n• [${f.severity}] ${f.caseName} (${f.stage}) — ${f.owner}\n  ${f.problem}\n  -> ${f.action}`);
 
   // ---- report ----
-  const html = buildReport({ findings: unique, counted, scanned, byStatus, dryRun: SETTINGS.DRY_RUN });
+  // ---- group it: one problem, not fifty tickets ----
+  const { escalations, grouped, singles } = group(unique);
+  if (escalations.length) {
+    console.log(`\nESCALATE (${escalations.length}) — a backlog, not a reminder:`);
+    for (const g of escalations) console.log(`  ${groupSentence(g)}\n     -> ${g.action}`);
+  }
+  if (grouped.length) {
+    console.log(`\nGROUPED (${grouped.length}) — the same issue on several cases:`);
+    for (const g of grouped) console.log(`  ${groupSentence(g)}`);
+  }
+  if (singles.length) {
+    console.log(`\nINDIVIDUAL CASES (${singles.length}):`);
+    for (const f of singles) console.log(`  [${f.severity}] ${f.caseName} — ${f.owner}\n     ${f.problem}\n     -> ${f.action}`);
+  }
+
+  const html = buildReport({ escalations, grouped, singles, counted, scanned, byStatus, dryRun: SETTINGS.DRY_RUN });
   require("fs").writeFileSync("petition-compliance-report.html", html);
   console.log(`\nWrote petition-compliance-report.html (download it from this run's Artifacts).`);
 
