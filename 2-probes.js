@@ -40,7 +40,7 @@ async function runProbes(log = console.log) {
       if (probe.area === "quality" && LATE_STAGES.includes(c.status)) {
         severity = severity === "high" ? "critical" : "high";
       }
-      found.get(id).hits.push({ ...probe, severity, problem: contextualise(probe, c) });
+      found.get(id).hits.push({ ...probe, severity, problem: contextualise(probe, c), risk: probe.risk });
     }
   }
 
