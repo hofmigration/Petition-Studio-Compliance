@@ -368,7 +368,20 @@ check("the same group always reads the same way", (() => {
 
 // ---- the report stays short and recent ----
 check("at most 30 items are listed", SETTINGS.MAX_ITEMISED === 30);
-check("only cases from this year are listed", SETTINGS.ONLY_CASES_FROM === "2026-01-01");
+check("the date filter is off by default", SETTINGS.ONLY_CASES_FROM === null);
+check("the forms stage has a rule", !!STATUS_SLA.forms);
+check("an empty result is never reported as an all-clear when nothing was checked", (() => {
+  const h = buildReport({ escalations: [], grouped: [], singles: [], counted: {}, scanned: 561, byStatus: {}, dryRun: true, excluded: 561, checked: 0 });
+  return /Nothing was actually checked/.test(h) && !/came back clean/.test(h);
+})());
+check("a partial check is not reported as an all-clear", (() => {
+  const h = buildReport({ escalations: [], grouped: [], singles: [], counted: {}, scanned: 100, byStatus: {}, dryRun: true, excluded: 80, checked: 20 });
+  return /partial check/.test(h) && !/came back clean/.test(h);
+})());
+check("a genuine all-clear still reads as one", (() => {
+  const h = buildReport({ escalations: [], grouped: [], singles: [], counted: {}, scanned: 100, byStatus: {}, dryRun: true, excluded: 0, checked: 100 });
+  return /came back clean/.test(h);
+})());
 
 // ---- report ----
 const html = buildReport({
