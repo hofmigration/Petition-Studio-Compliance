@@ -41,6 +41,7 @@ function group(findings) {
         severity: worst.severity,
         oldestHours: oldest >= 0 ? oldest : null,
         action: first.action,
+        risk: first.risk || null,
         stage: first.stage,
         cases: list.slice(0, SETTINGS.CLUSTER_SHOW_CASES).map((f) => ({
           caseId: f.caseId, caseName: f.caseName, ageHours: Number.isFinite(f.ageHours) ? f.ageHours : null,
@@ -62,14 +63,33 @@ function group(findings) {
   return { escalations, grouped, singles };
 }
 
-// Wording for a group, so it reads as one problem rather than a repeated line.
+// Wording for a group. Phrasing is varied so a report of several groups does not read
+// like the same sentence repeated, and the variant is stable per owner and issue.
+const ESCALATION_OPENERS = [
+  (who, n, issue) => `${who} is carrying ${n} cases with the same problem: ${lowerFirst(issue)}.`,
+  (who, n, issue) => `${n} of ${who}'s cases are all held up the same way: ${lowerFirst(issue)}.`,
+  (who, n, issue) => `The same problem is sitting on ${n} of ${who}'s cases: ${lowerFirst(issue)}.`,
+];
+const GROUP_OPENERS = [
+  (who, n, issue) => `${who} has ${n} cases where ${lowerFirst(issue)}.`,
+  (who, n, issue) => `${n} of ${who}'s cases share one problem: ${lowerFirst(issue)}.`,
+  (who, n, issue) => `On ${n} of ${who}'s cases, ${lowerFirst(issue)}.`,
+];
+const pickVariant = (arr, seed) => {
+  let h = 0;
+  for (const ch of String(seed)) h = (h * 31 + ch.charCodeAt(0)) % 100000;
+  return arr[h % arr.length];
+};
+
 function groupSentence(item) {
-  const n = item.count;
   const who = item.owner && item.owner !== "unassigned" ? item.owner : "Unassigned";
+  const set = item.kind === "escalation" ? ESCALATION_OPENERS : GROUP_OPENERS;
+  const opener = pickVariant(set, `${who}|${item.issue}`)(who, item.count, item.issue);
   const oldest = item.oldestHours ? ` The oldest has been waiting ${Math.round(item.oldestHours)} business hours.` : "";
-  if (item.kind === "escalation")
-    return `${who} has ${n} cases with the same problem: ${lowerFirst(item.issue)}.${oldest} A backlog this size will not clear case by case and needs to be planned.`;
-  return `${who} has ${n} cases where ${lowerFirst(item.issue)}.${oldest}`;
+  const tail = item.kind === "escalation"
+    ? " A backlog this size will not clear case by case and needs to be planned."
+    : "";
+  return `${opener}${oldest}${tail}`;
 }
 const lowerFirst = (t) => (t ? t.charAt(0).toLowerCase() + t.slice(1) : t);
 
