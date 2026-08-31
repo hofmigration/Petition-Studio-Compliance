@@ -123,13 +123,13 @@ const EVENT_MARKERS = {
 const PROBES = [
   // ---- critical: something has failed and needs a person today ----
   {
-    id: "brainstorm_overdue", filter: { brainstorm: "overdue" },
+    id: "brainstorm_overdue", risk: 'Avoid drafting from a call nobody captured. The endeavour statement ends up built on memory, and the gaps only surface at review when they cost more to fix.', filter: { brainstorm: "overdue" },
     area: "control", severity: "critical", owner: "brainstorm_specialist",
     problem: "The brainstorm slot has passed and nothing was captured, no transcript or summary",
     action: "capture the brainstorm outcome, or rebook the call",
   },
   {
-    id: "drafting_escalated", filter: { drafting_health: "escalated" },
+    id: "drafting_escalated", risk: 'Avoid leaving it in the loop. It will never clear itself, and the case ages with nobody actually holding it.', filter: { drafting_health: "escalated" },
     area: "control", severity: "critical", owner: "petition_writer",
     problem: "The automated review loop hit its retry limit without ever approving the draft",
     action: "resolve this case by hand, it will not clear itself",
@@ -137,49 +137,49 @@ const PROBES = [
 
   // ---- high: the process has stalled on us, not on the client ----
   {
-    id: "no_reviewer", filter: { reviewer_queue: "no_reviewer" },
+    id: "no_reviewer", risk: 'Avoid the case reaching filing without an independent read. The review exists so the writer is not the last person to see it.', filter: { reviewer_queue: "no_reviewer" },
     area: "assign", severity: "high", owner: "case_manager",
     problem: "No reviewer is assigned to this case",
     action: "assign a reviewer",
   },
   {
-    id: "review_unanswered", filter: { reviewer_queue: "awaiting_me" },
+    id: "review_unanswered", risk: 'Avoid leaving the writer blocked. They cannot move on, and the stage clock keeps running against them, not the reviewer.', filter: { reviewer_queue: "awaiting_me" },
     area: "control", severity: "high", owner: "reviewer",
     problem: "The writer asked for a review and no reviewer has responded",
     action: "pick this case up for review",
   },
   {
-    id: "intake_needs_review", filter: { intake_state: "needs_review" },
+    id: "intake_needs_review", risk: 'Avoid making the client wait immediately after they did what we asked. It is the point where confidence is easiest to lose.', filter: { intake_state: "needs_review" },
     area: "sla", severity: "high", owner: "case_manager",
     problem: "The client has submitted their intake form and nobody has reviewed it",
     action: "review the submitted intake form",
   },
   {
-    id: "audit_over_5d", filter: { audit_age: "over_5d" },
+    id: "audit_over_5d", risk: 'Avoid document problems surfacing after drafting has started. Anything found late means rework, not a correction.', filter: { audit_age: "over_5d" },
     area: "sla", severity: "high", owner: "processor",
     problem: "The document audit has been open for more than 5 days",
     action: "complete the document audit",
   },
   {
-    id: "never_invited", filter: { client_portal: "never_invited" },
+    id: "never_invited", risk: 'Avoid the case sitting at intake with no way for the client to send anything. Nothing else can start until this is done.', filter: { client_portal: "never_invited" },
     area: "control", severity: "high", owner: "case_manager",
     problem: "The client has never been invited to the portal",
     action: "send the client their portal invitation",
   },
   {
-    id: "brainstorm_needs_booking", filter: { brainstorm_followup: "needs_booking" },
+    id: "brainstorm_needs_booking", risk: 'Avoid reaching drafting without the endeavour discussion. Writing first and asking later produces a petition that has to be rebuilt.', filter: { brainstorm_followup: "needs_booking" },
     area: "chase", severity: "high", owner: "case_manager",
     problem: "The case is at case analysis and brainstorm, and no call time has been picked",
     action: "coordinate the client and pick a brainstorm slot",
   },
   {
-    id: "approval_over_week", filter: { client_approval: "waiting_over_week" },
+    id: "approval_over_week", risk: 'Avoid silence hardening into a lost case. The longer a client sits with an unapproved petition, the harder it is to restart.', filter: { client_approval: "waiting_over_week" },
     area: "chase", severity: "high", owner: "case_manager",
     problem: "The petition has been with the client for over a week with no approval",
     action: "chase the client for their approval",
   },
   {
-    id: "stale_stage", filter: { stage_age: "stale" },
+    id: "stale_stage", risk: 'Avoid a case quietly ageing. Nothing is wrong with it except that nobody has touched it, which is how cases get lost rather than lost on merit.', filter: { stage_age: "stale" },
     area: "stalled", severity: "high", owner: null,
     problem: "The case has been sitting in the same stage for more than two weeks",
     action: "move this case forward or escalate it",
@@ -187,45 +187,45 @@ const PROBES = [
 
   // ---- medium: worth attention before it becomes a problem ----
   {
-    id: "audit_over_2d", informational: true, filter: { audit_age: "over_2d" },
+    id: "audit_over_2d", risk: 'Keep the audit moving so the writer is not waiting on documents.', informational: true, filter: { audit_age: "over_2d" },
     area: "sla", severity: "medium", owner: "processor",
     problem: "The document audit has been open for more than 2 days",
     action: "complete the document audit",
     supersededBy: "audit_over_5d",
   },
   {
-    id: "approval_waiting", informational: true, filter: { client_approval: "waiting" },
+    id: "approval_waiting", risk: 'Keep the client engaged so the approval does not drift.', informational: true, filter: { client_approval: "waiting" },
     area: "chase", severity: "medium", owner: "case_manager",
     problem: "The petition is with the client and not yet approved",
     action: "keep the client moving toward approval",
     supersededBy: "approval_over_week",
   },
   {
-    id: "portal_not_activated", informational: true, filter: { client_portal: "invited_not_activated" },
+    id: "portal_not_activated", risk: 'The client cannot upload anything until the account is set up.', informational: true, filter: { client_portal: "invited_not_activated" },
     area: "chase", severity: "medium", owner: "case_manager",
     problem: "The client was invited to the portal but never finished setting it up",
     action: "help the client activate their portal account",
   },
   {
-    id: "brainstorm_unconfirmed", informational: true, filter: { brainstorm: "awaiting_confirmation" },
+    id: "brainstorm_unconfirmed", risk: 'An unconfirmed slot is not a booking; it will quietly pass.', informational: true, filter: { brainstorm: "awaiting_confirmation" },
     area: "chase", severity: "medium", owner: "case_manager",
     problem: "A brainstorm time was picked but never confirmed",
     action: "confirm the brainstorm slot with the client",
   },
   {
-    id: "reschedule_requested", informational: true, filter: { brainstorm: "reschedule_requested" },
+    id: "reschedule_requested", risk: 'Agree the new time before the old one lapses.', informational: true, filter: { brainstorm: "reschedule_requested" },
     area: "chase", severity: "medium", owner: "case_manager",
     problem: "Somebody asked to move the confirmed brainstorm slot",
     action: "agree a new brainstorm time and confirm it",
   },
   {
-    id: "audit_changes_requested", informational: true, filter: { audit_state: "changes_requested" },
+    id: "audit_changes_requested", risk: 'The case is waiting on the client, so it needs chasing rather than watching.', informational: true, filter: { audit_state: "changes_requested" },
     area: "chase", severity: "medium", owner: "processor",
     problem: "The document audit was sent back to the client for changes",
     action: "chase the client for the corrected documents",
   },
   {
-    id: "intake_awaiting", informational: true, filter: { intake_state: "awaiting" },
+    id: "intake_awaiting", risk: 'Nothing can start until the form arrives.', informational: true, filter: { intake_state: "awaiting" },
     area: "chase", severity: "medium", owner: "case_manager",
     problem: "Still waiting on the client to submit their intake form",
     action: "chase the client for the intake form",
@@ -233,13 +233,13 @@ const PROBES = [
 
   // ---- quality: the analyst's read on the case ----
   {
-    id: "verdict_no_go", filter: { analysis_verdict: "no_go" },
+    id: "verdict_no_go", risk: 'Avoid taking a case forward the analyst judged not ready. Strengthen it now, or the weakness travels all the way to filing.', filter: { analysis_verdict: "no_go" },
     area: "quality", severity: "high", owner: "petition_writer",
     problem: "The case analysis verdict is NO GO, the case is not ready to file",
     action: "strengthen the case before it goes any further",
   },
   {
-    id: "verdict_weak", informational: true, filter: { analysis_verdict: "weak" },
+    id: "verdict_weak", risk: 'Address the weak points while there is still time to strengthen them.', informational: true, filter: { analysis_verdict: "weak" },
     area: "quality", severity: "medium", owner: "petition_writer",
     problem: "The case analysis verdict is WEAK, there are real concerns about positioning",
     action: "review the weak points before drafting goes further",
@@ -264,6 +264,9 @@ const SETTINGS = {
 
   // ---- scope ----
   STAFF_IN_SCOPE,
+  // Only cases from this year. Older cases are historic backlog and drown the report;
+  // they are counted, not listed. Set to null to include everything.
+  ONLY_CASES_FROM: "2026-01-01",
   // Findings on a trainee writer's case are raised one level, because their work is
   // meant to be watched more closely while they are still in training.
   ESCALATE_FOR_TRAINEES: true,
@@ -303,7 +306,7 @@ const SETTINGS = {
   // At most this many findings per case in the itemised list — the worst one only.
   MAX_PER_CASE: 1,
   // Hard ceiling on the itemised list, so the report never becomes unreadable.
-  MAX_ITEMISED: 60,
+  MAX_ITEMISED: 30,
   // Everything below ITEMISE_FROM is rolled into a count per type.
   SUMMARISE_THE_REST: true,
 
