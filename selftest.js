@@ -309,7 +309,8 @@ const mkFindings = (n, owner, problem, sev = "critical") =>
   Array.from({ length: n }, (_, i) => ({ caseId: `${owner}${i}`, caseName: `Client ${i}`, owner,
     severity: sev, area: "control", problem, action: "do the thing", ageHours: 40 + i * 5 }));
 
-const bigBacklog = mkFindings(37, "Kysha-Jade Nicholene", "The brainstorm slot has passed and nothing was captured");
+const bigBacklog = mkFindings(37, "Kysha-Jade Nicholene", "The brainstorm slot has passed and nothing was captured")
+  .map((f) => ({ ...f, risk: "Avoid drafting from a call nobody captured." }));
 const smallGroup = mkFindings(5, "Fatima Khalid", "The writer asked for a review and no reviewer has responded", "high");
 const isolated = [
   { caseId: "X1", caseName: "Ahmed", owner: "Aleena Najeeb", severity: "critical", area: "control", problem: "Ready to File with no client approval", action: "capture approval", ageHours: 10 },
@@ -341,6 +342,34 @@ check("three of a kind stay individual", group(mkFindings(3, "Person C", "Rare i
 check("nothing in produces nothing out", (() => { const g = group([]); return !g.escalations.length && !g.grouped.length && !g.singles.length; })());
 check("grouping thresholds are sane", SETTINGS.CLUSTER_MIN >= 2 && SETTINGS.ESCALATE_MIN > SETTINGS.CLUSTER_MIN);
 
+// ---- every finding says why, what to do, and what to avoid ----
+check("every probe has a risk line", PROBES.every((p) => p.risk && p.risk.length > 20),
+  PROBES.filter((p) => !p.risk || p.risk.length <= 20).map((p) => p.id).join(", "));
+check("no two probes share the same risk line",
+  new Set(PROBES.map((p) => p.risk)).size === PROBES.length);
+check("the risk line is carried into a group", (() => {
+  const p = PROBES.find((x) => x.id === "brainstorm_overdue");
+  const list = Array.from({ length: 9 }, (_, i) => ({ caseId: `q${i}`, caseName: `c${i}`, owner: "Someone",
+    severity: "critical", area: p.area, problem: p.problem, action: p.action, risk: p.risk, ageHours: 30 + i }));
+  return group(list).escalations[0]?.risk === p.risk;
+})());
+check("group wording varies between different owners and issues", (() => {
+  const mk = (owner, issue) => Array.from({ length: 5 }, (_, i) => ({ caseId: `${owner}${i}`, caseName: "c", owner,
+    severity: "high", area: "control", problem: issue, action: "a", risk: "r", ageHours: 20 }));
+  const g = group([...mk("Person A", "issue one happened"), ...mk("Person B", "issue two happened"), ...mk("Person C", "issue three happened")]);
+  const sentences = g.grouped.map(groupSentence);
+  return new Set(sentences.map((x) => x.replace(/Person [A-C]|issue \w+ happened|\d+/g, ""))).size > 1;
+})());
+check("the same group always reads the same way", (() => {
+  const mk = () => Array.from({ length: 5 }, (_, i) => ({ caseId: `z${i}`, caseName: "c", owner: "Person Z",
+    severity: "high", area: "control", problem: "the thing went wrong", action: "a", risk: "r", ageHours: 20 }));
+  return groupSentence(group(mk()).grouped[0]) === groupSentence(group(mk()).grouped[0]);
+})());
+
+// ---- the report stays short and recent ----
+check("at most 30 items are listed", SETTINGS.MAX_ITEMISED === 30);
+check("only cases from this year are listed", SETTINGS.ONLY_CASES_FROM === "2026-01-01");
+
 // ---- report ----
 const html = buildReport({
   ...g1,
@@ -352,6 +381,8 @@ check("the report shows the grouped issue", /Grouped — the same issue/.test(ht
 check("the report shows individual cases", /Individual cases/.test(html));
 check("the routine states appear as counts", /Normal states, for information/.test(html) && /190/.test(html));
 check("the escalation sentence is in the report", /backlog this size/.test(html));
+check("the report tells the reader what to do", /<strong>Do:<\/strong>/.test(html));
+check("the report tells the reader what to avoid", /<strong>Avoid:<\/strong>/.test(html));
 check("the report links to the dashboard", html.includes("petition.hofmigration.com/dashboard"));
 check("the report escapes text", !/<script/i.test(html));
 
