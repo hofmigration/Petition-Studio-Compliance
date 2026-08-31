@@ -108,6 +108,27 @@ For the cases a probe hit, the history is read for the things no filter covers:
 
 Turn this pass off with `READ_TIMELINES: false` if you want a faster run.
 
+## One problem, not fifty tickets
+
+A run once produced **37 identical "brainstorm overdue" criticals, all against one
+person**. That is not 37 failures, it is one backlog — and reporting it 37 times makes
+the report unreadable and makes "critical" meaningless.
+
+Findings that share the **same owner and the same issue** are therefore grouped:
+
+| Group size | Treated as |
+|---|---|
+| **8 or more** | an **escalation** — a systemic problem. "Kysha has 37 cases with the same problem… a backlog this size will not clear case by case and needs to be planned." |
+| **4 to 7** | one **grouped** line naming the oldest few cases |
+| **1 to 3** | listed **case by case**, as normal |
+
+Each group names the **oldest cases first** with how long they have waited, since those
+are the ones that matter, and counts the rest.
+
+The same issue against **different people** is not merged, and different issues against
+the **same person** are not merged either — grouping only ever combines one person's
+repetition of one problem.
+
 ## How much gets reported
 
 A report of two thousand findings is not a report. Only what needs somebody to **act
