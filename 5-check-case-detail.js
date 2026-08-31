@@ -68,15 +68,18 @@ module.exports = function checkCaseDetail(full, listRow) {
       if (ageHours >= rule.breachHours * 2)
         issues.push({ area: "sla", severity: "critical", owner: rule.owner,
           problem: `${label}: ${ageHours} business hours in stage, more than double the ${rule.breachHours}h limit`,
-          action: "move this case forward today or escalate it" });
+          action: "move this case forward today or escalate it",
+          risk: 'A stage that runs over is time the client is waiting with nothing visible happening.' });
       else if (ageHours >= rule.breachHours)
         issues.push({ area: "sla", severity: "high", owner: rule.owner,
           problem: `${label}: ${ageHours} business hours in stage, over the ${rule.breachHours}h limit`,
-          action: "move this case forward" });
+          action: "move this case forward",
+          risk: 'A stage that runs over is time the client is waiting with nothing visible happening.' });
       else if (rule.warnHours && ageHours >= rule.warnHours)
         issues.push({ area: "sla", severity: "medium", owner: rule.owner,
           problem: `${label}: ${ageHours} business hours in stage, approaching the ${rule.breachHours}h limit`,
-          action: "keep this case moving before it goes over" });
+          action: "keep this case moving before it goes over",
+          risk: 'A stage that runs over is time the client is waiting with nothing visible happening.' });
     }
   }
 
@@ -91,7 +94,8 @@ module.exports = function checkCaseDetail(full, listRow) {
   if (SETTINGS.CHECK_APPROVAL_BEFORE_FILING && status === "ready_to_file" && !approved)
     issues.push({ area: "control", severity: "critical", owner: "case_manager",
       problem: "Case is Ready to File and the client review record shows no approval",
-      action: "capture the written client approval before this case is filed" });
+      action: "capture the written client approval before this case is filed",
+          risk: "Never file without the client's written approval. It exposes both the firm and the client, and it cannot be corrected after submission." });
 
   if (sentAt && !approved) {
     const d = daysSince(sentAt);
@@ -131,20 +135,23 @@ module.exports = function checkCaseDetail(full, listRow) {
       if (status !== "intake")
         issues.push({ area: "documents", severity: "high", owner: "processor",
           problem: `Case is at ${status} with no documents uploaded at all`,
-          action: "collect the client documents before this case goes further" });
+          action: "collect the client documents before this case goes further",
+          risk: 'Nothing can be written from an empty file. The case is not really in progress.' });
     } else {
       const names = docs.map((d) => `${pick(d, "label", "name", "title") || ""} ${pick(d, "file_name", "filename", "file") || ""}`).join(" | ");
       const missing = DOC_RULES.filter((r) => !r.match.test(names)).map((r) => r.label);
       if (missing.length && (late || status === "advanced_review" || status === "profile_review"))
         issues.push({ area: "documents", severity: late ? "high" : "medium", owner: "processor",
           problem: `Core documents are missing: ${missing.join(", ")}`,
-          action: "collect the missing documents from the client" });
+          action: "collect the missing documents from the client",
+          risk: 'Avoid building the petition around gaps. Missing basics are found at review, when there is no time left to collect them.' });
 
       const empty = docs.filter((d) => { const sz = pick(d, "size", "bytes", "file_size"); return sz !== undefined && Number(sz) === 0; });
       if (empty.length)
         issues.push({ area: "documents", severity: "medium", owner: "processor",
           problem: `${empty.length} uploaded file(s) are empty and cannot be read`,
-          action: "ask the client to re-upload the empty files" });
+          action: "ask the client to re-upload the empty files",
+          risk: 'An unreadable upload is the same as no upload, and the client believes they have sent it.' });
     }
   }
 
@@ -162,7 +169,8 @@ module.exports = function checkCaseDetail(full, listRow) {
     if (missing.length)
       issues.push({ area: "quality", severity: status === "ready_to_file" ? "critical" : "high", owner: "petition_writer",
         problem: `The petition is missing: ${missing.join(", ")}`,
-        action: "complete the missing petition sections" });
+        action: "complete the missing petition sections",
+          risk: 'Avoid submitting an incomplete petition. A missing endeavour statement or exhibit list is the kind of gap that draws a request for evidence.' });
   }
 
   // =====================================================================
@@ -186,11 +194,13 @@ module.exports = function checkCaseDetail(full, listRow) {
       if (bad.length && status === "ready_to_file")
         issues.push({ area: "control", severity: "critical", owner: "forms_specialist",
           problem: `Case is Ready to File with incomplete forms: ${bad.slice(0, 4).join("; ")}`,
-          action: "complete, sign and check the outstanding forms before filing" });
+          action: "complete, sign and check the outstanding forms before filing",
+          risk: 'Never file on unsigned or unchecked forms. It risks outright rejection on a case that is otherwise ready.' });
       else if (bad.length && status === "internal_review")
         issues.push({ area: "quality", severity: "medium", owner: "forms_specialist",
           problem: `Forms still outstanding: ${bad.slice(0, 4).join("; ")}`,
-          action: "prepare and check the outstanding forms" });
+          action: "prepare and check the outstanding forms",
+          risk: 'Get the forms done before the case is otherwise ready, not after.' });
     }
   }
 
@@ -206,11 +216,13 @@ module.exports = function checkCaseDetail(full, listRow) {
       if (st && /pending|draft|in progress|requested|awaiting|not started/.test(st))
         issues.push({ area: "quality", severity: status === "ready_to_file" ? "high" : "medium", owner: "petition_writer",
           problem: `The ${label} are still "${st}" while the case is at ${status}`,
-          action: `complete the ${label}` });
+          action: `complete the ${label}`,
+          risk: 'Supporting evidence left pending late is the thing that holds up an otherwise finished case.' });
       else if (!st && body.replace(/\s+/g, "").length < 30 && status === "ready_to_file")
         issues.push({ area: "quality", severity: "medium", owner: "petition_writer",
           problem: `The ${label} appear to be empty on a case that is Ready to File`,
-          action: `confirm whether the ${label} are needed, and complete them if so` });
+          action: `confirm whether the ${label} are needed, and complete them if so`,
+          risk: 'Confirm whether these are needed before filing, rather than after.' });
     }
   }
 
