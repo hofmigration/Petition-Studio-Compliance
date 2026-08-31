@@ -7,16 +7,23 @@ const caseLink = (id) => `${SETTINGS.DASHBOARD}?case=${encodeURIComponent(id)}`;
 const SEV = { critical: "#c0392b", high: "#c0392b", medium: "#b9770e", low: "#7c8aa5" };
 const RANK = { critical: 0, high: 1, medium: 2, low: 3 };
 
+// Every finding says three things: why it is here, what to do, and what to avoid.
+function threeLines(f) {
+  const colour = SEV[f.severity] || SEV.low;
+  return [
+    `<strong style="color:${colour};">${String(f.severity).toUpperCase()}</strong> &middot; ${T.esc(f.problem)}`,
+    `<strong>Do:</strong> ${T.esc(f.action || "review this case")}`,
+    ...(f.risk ? [`<strong>Avoid:</strong> ${T.esc(f.risk)}`] : []),
+  ];
+}
+
 function rows(items) {
   return items.map((f, i, a) => T.row({
     name: f.caseName || f.caseId,
     title: f.owner ? `— ${f.owner}` : "",
     link: caseLink(f.caseId),
     linkLabel: "Open case",
-    details: [
-      `<strong style="color:${SEV[f.severity] || SEV.low};">${String(f.severity).toUpperCase()}</strong> &middot; ${T.esc(f.problem)}`,
-      `${T.esc(f.stage || "")}${f.action ? ` &middot; ${T.esc(f.action)}` : ""}`,
-    ],
+    details: threeLines(f),
     last: i === a.length - 1,
   })).join("");
 }
@@ -33,7 +40,8 @@ function groupRow(item, i, arr) {
       <strong style="color:${colour};">${item.count} cases</strong> &middot; <strong style="color:#1f2d5c;">${T.esc(item.owner || "Unassigned")}</strong>
     </div>
     <div style="font-size:13px;color:#33475b;line-height:1.55;margin-top:3px;">${T.esc(groupSentence(item))}</div>
-    <div style="font-size:12px;color:#516f90;margin-top:5px;">What to do: ${T.esc(item.action || "review these cases")}</div>
+    <div style="font-size:12px;color:#33475b;margin-top:5px;"><strong>Do:</strong> ${T.esc(item.action || "review these cases")}</div>
+    ${item.risk ? `<div style="font-size:12px;color:#516f90;margin-top:3px;"><strong>Avoid:</strong> ${T.esc(item.risk)}</div>` : ""}
     <div style="font-size:11.5px;margin-top:5px;">${cases}${more}</div>
   </div>`;
 }
