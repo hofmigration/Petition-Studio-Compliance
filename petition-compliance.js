@@ -56,7 +56,7 @@ async function main() {
   console.log(`Roster: ${STAFF.length} people — ${STAFF.filter((p) => p.role === "petition_writer").length} writers (${TRAINEES.length} in training), ${DUAL_ROLE.length} who also review`);
   if (DUAL_ROLE.length) console.log(`  ${DUAL_ROLE.join(" and ")} hold both roles, so the independence check matters most on their cases.`);
   console.log(`Cases on hold are excluded from every check.`);
-  console.log(`Only cases created on or after ${SETTINGS.ONLY_CASES_FROM || "any date"} are listed.`);
+  if (SETTINGS.ONLY_CASES_FROM) console.log(`Date filter ON: only cases created on or after ${SETTINGS.ONLY_CASES_FROM}.`);
   console.log(`At most ${SETTINGS.MAX_ITEMISED} items are listed; the rest are counted.`);
 
   // ---- pass 1: the probes ----
@@ -292,7 +292,14 @@ async function main() {
     }
   }
 
-  const html = buildReport({ escalations, grouped, singles, counted, scanned, byStatus, dryRun: SETTINGS.DRY_RUN });
+  const checkedCount = entries.length;
+  if (scanned > 0 && checkedCount === 0)
+    console.log(`\n!! NOTHING WAS CHECKED. All ${scanned} live case(s) were set aside before any rule ran.\n   This is NOT an all-clear. Check ONLY_CASES_FROM and STAFF_IN_SCOPE in config.js.`);
+  else if (tooOld > 0)
+    console.log(`\nNote: ${tooOld} case(s) were set aside by the date filter and never checked.`);
+
+  const html = buildReport({ escalations, grouped, singles, counted, scanned, byStatus,
+    dryRun: SETTINGS.DRY_RUN, excluded: tooOld, checked: checkedCount });
   require("fs").writeFileSync("petition-compliance-report.html", html);
   console.log(`\nWrote petition-compliance-report.html (download it from this run's Artifacts).`);
 
