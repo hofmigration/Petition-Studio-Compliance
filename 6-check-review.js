@@ -43,21 +43,24 @@ module.exports = function checkReview(full, listRow) {
       if (atFiling && (open.length || unverified.length))
         issues.push({ area: "control", severity: "critical", owner: "reviewer",
           problem: `Case is Ready to File with ${open.length + unverified.length} amendment(s) not verified (${open.length} not applied, ${unverified.length} awaiting verification)`,
-          action: "close out the amendments before this case is filed" });
+          action: "close out the amendments before this case is filed",
+          risk: "Never file with the review loop still open. An amendment nobody verified is an unfixed problem that leaves with the petition." });
       else {
         const slowOpen = open.filter((o) => o.since !== null && o.since >= SETTINGS.AMENDMENT_APPLY_HOURS);
         if (slowOpen.length) {
           const worst = Math.max(...slowOpen.map((o) => o.since));
           issues.push({ area: "quality", severity: worst >= SETTINGS.AMENDMENT_APPLY_HOURS * 2 ? "high" : "medium", owner: "petition_writer",
             problem: `${slowOpen.length} amendment(s) raised by the reviewer and still not applied, the oldest ${Math.floor(worst)} hours ago`,
-            action: "apply the outstanding amendments" });
+            action: "apply the outstanding amendments",
+            risk: "Avoid letting reviewer feedback sit. It has to be applied eventually, and doing it later means re-reading the whole case." });
         }
         const slowVerify = unverified.filter((o) => o.since !== null && o.since >= SETTINGS.AMENDMENT_VERIFY_HOURS);
         if (slowVerify.length) {
           const worst = Math.max(...slowVerify.map((o) => o.since));
           issues.push({ area: "quality", severity: worst >= SETTINGS.AMENDMENT_VERIFY_HOURS * 2 ? "high" : "medium", owner: "reviewer",
             problem: `${slowVerify.length} amendment(s) applied by the writer and still not verified, the oldest ${Math.floor(worst)} hours ago`,
-            action: "verify the applied amendments and close them" });
+            action: "verify the applied amendments and close them",
+            risk: "Avoid an amendment that is fixed but never confirmed. On paper the case still fails its own review." });
         }
       }
     }
@@ -76,7 +79,8 @@ module.exports = function checkReview(full, listRow) {
       if (!responded && h !== null && h >= SETTINGS.REVIEW_RESPONSE_HOURS)
         issues.push({ area: "control", severity: h >= SETTINGS.REVIEW_RESPONSE_HOURS * 2 ? "high" : "medium", owner: "reviewer",
           problem: `The writer asked for review ${Math.floor(h)} hours ago and the reviewer has not responded at all`,
-          action: "review the case, or send it back with your notes" });
+          action: "review the case, or send it back with your notes",
+          risk: "Avoid leaving the writer waiting. They cannot progress, and the delay counts against the case, not the reviewer." });
     }
   }
 
