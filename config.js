@@ -285,6 +285,15 @@ const SETTINGS = {
   // A case with no event at all for this long is stalled, whatever its status.
   STALLED_AFTER_DAYS: 7,
 
+  // ---- GROUPING: one problem, not fifty tickets ----
+  // A run once produced 37 identical "brainstorm overdue" criticals, all belonging to
+  // one person. That is not 37 failures, it is one backlog. Findings that share the
+  // same owner AND the same issue are grouped, and a big enough group is escalated as
+  // a systemic problem rather than repeated case by case.
+  CLUSTER_MIN: 4,          // same owner + same issue, this many or more -> one grouped item
+  ESCALATE_MIN: 8,         // a group this big is a systemic problem, escalated
+  CLUSTER_SHOW_CASES: 5,   // example cases named inside a group (the oldest first)
+
   // ---- HOW MUCH IS REPORTED ----
   // A report of two thousand findings is not a report. Only things that need somebody
   // to act TODAY are listed case by case; everything else is counted, not listed.
