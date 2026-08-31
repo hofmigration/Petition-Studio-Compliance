@@ -75,6 +75,7 @@ const STATUS_SLA = {
   advanced_review:   { phase: "3. Advanced Review / Brainstorm", warnHours: 48,  breachHours: 72,   owner: "petition_writer" },
   ai_drafting:       { phase: "4. Drafting",                    warnHours: 24,   breachHours: 48,   owner: "petition_writer" },
   internal_review:   { phase: "5. Internal Review",             warnHours: 24,   breachHours: 48,   owner: "reviewer" },
+  forms:             { phase: "6. Forms",                       warnHours: 24,   breachHours: 48,   owner: "forms_specialist" },
   ready_to_file:     { phase: "7. Finalization",                warnHours: 12,   breachHours: 24,   owner: "case_manager" },
 };
 
@@ -264,9 +265,10 @@ const SETTINGS = {
 
   // ---- scope ----
   STAFF_IN_SCOPE,
-  // Only cases from this year. Older cases are historic backlog and drown the report;
-  // they are counted, not listed. Set to null to include everything.
-  ONLY_CASES_FROM: "2026-01-01",
+  // Optional cut-off by case creation date. OFF by default: switching it on once set
+  // aside every live case and produced a green "nothing needs action" report while
+  // nothing had actually been checked. Only use it if you know the dates on the data.
+  ONLY_CASES_FROM: null,
   // Findings on a trainee writer's case are raised one level, because their work is
   // meant to be watched more closely while they are still in training.
   ESCALATE_FOR_TRAINEES: true,
