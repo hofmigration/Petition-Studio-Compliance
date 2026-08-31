@@ -139,10 +139,17 @@ today** is listed case by case; everything else is counted.
 | **Listed, one line per case** | severity **high and critical** only, and each case contributes its **worst issue only** |
 | **Counted, not listed** | normal states — waiting on an intake form, a client yet to approve, an audit two days old, a weak verdict. Real, but not failures |
 | **Hard cap** | **30 items**, so the report is always readable |
-| **This year only** | cases created before **1 January 2026** are historic backlog. Counted, never listed. |
+| **Date cut-off** | **off by default.** Switching it on once set aside all 561 live cases and produced a green "nothing needs action" report while nothing had been checked. Only use `ONLY_CASES_FROM` if you know the dates on the data. |
 
 Tighten further with `ITEMISE_FROM: "critical"`, or change `ONLY_CASES_FROM`,
 `MAX_PER_CASE` and `MAX_ITEMISED`.
+
+### An all-clear must mean something
+
+A green "nothing needs action today" is only shown when every live case was actually
+checked. If a filter set cases aside, the report says so instead — and if **nothing** was
+checked, it says that in red. A report that goes quiet because it looked at nothing is
+worse than a noisy one.
 
 ### Every item says three things
 
