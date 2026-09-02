@@ -31,15 +31,15 @@ module.exports = function checkSla(c, t) {
   const h = t.hoursInStage;
   if (h >= rule.breachHours * 2)
     issues.push({ area: "sla", severity: "critical", owner: rule.owner,
-      problem: `${rule.phase}: ${round(h)} working hours in stage, more than double the ${rule.breachHours}h SLA`,
+      problem: `${rule.phase}: ${round(h)} working hours in stage, more than double the ${rule.breachHours}h limit`,
       action: "move this case forward today or escalate it" });
   else if (h >= rule.breachHours)
     issues.push({ area: "sla", severity: "high", owner: rule.owner,
-      problem: `${rule.phase}: ${round(h)} working hours in stage, over the ${rule.breachHours}h SLA`,
+      problem: `${rule.phase}: ${round(h)} working hours in stage, over the ${rule.breachHours}h limit`,
       action: "move this case forward" });
   else if (rule.warnHours && h >= rule.warnHours)
     issues.push({ area: "sla", severity: "medium", owner: rule.owner,
-      problem: `${rule.phase}: ${round(h)} working hours in stage, approaching the ${rule.breachHours}h SLA`,
+      problem: `${rule.phase}: ${round(h)} working hours in stage, approaching the ${rule.breachHours}h limit`,
       action: "keep this case moving before it breaches" });
 
   return issues;
