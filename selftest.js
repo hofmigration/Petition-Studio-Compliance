@@ -10,6 +10,7 @@ const { qs } = require("./0-api");
 const checkCaseDetail = require("./5-check-case-detail");
 const checkReview = require("./6-check-review");
 const { group, groupSentence } = require("./7-group");
+const checkMomentum = require("./8-check-momentum");
 
 const H = 3600000, D = 86400000, now = Date.now();
 let pass = 0, fail = 0;
@@ -92,9 +93,13 @@ check("empty filters produce no query string", qs({}) === "");
 // ---- the SLAs Ali confirmed ----
 check("Case Analysis breaches at 72 working hours", STATUS_SLA.profile_review.breachHours === 72);
 check("Case Analysis warns at 48 hours", STATUS_SLA.profile_review.warnHours === 48);
-check("Drafting breaches at 48 working hours", STATUS_SLA.ai_drafting.breachHours === 48);
-check("Internal review breaches at 48 and warns at 24",
-  STATUS_SLA.internal_review.breachHours === 48 && STATUS_SLA.internal_review.warnHours === 24);
+check("Drafting is allowed 4 to 5 days, not 48 hours",
+  STATUS_SLA.ai_drafting.warnHours === 96 && STATUS_SLA.ai_drafting.breachHours === 120);
+check("Internal review is allowed 3 to 4 days, not 48 hours",
+  STATUS_SLA.internal_review.warnHours === 72 && STATUS_SLA.internal_review.breachHours === 96);
+check("the long stages get more room than the short ones",
+  STATUS_SLA.ai_drafting.breachHours > STATUS_SLA.profile_review.breachHours &&
+  STATUS_SLA.internal_review.breachHours > STATUS_SLA.ready_to_file.breachHours);
 check("Intake has no SLA and is chased instead",
   STATUS_SLA.intake.breachHours === null && (CHASE.intake || []).length > 0);
 check("every API status has a rule",
@@ -113,10 +118,10 @@ check("no time counted before anything happened", hoursBetween(0) === 0);
 // ---- SLA behaviour ----
 check("drafting inside the SLA is not flagged",
   !has(run(kase({ status: "ai_drafting" }), [ev(2, "ai_drafting", "moved to drafting")]), /SLA/));
-check("drafting over 48h is flagged",
-  has(run(kase({ status: "ai_drafting" }), [ev(24 * 9, "ai_drafting", "moved to drafting")]), /over the 48h SLA/));
-check("drafting far over the SLA is critical",
-  run(kase({ status: "ai_drafting" }), [ev(24 * 30, "ai_drafting", "moved to drafting")])
+check("drafting past its limit is flagged",
+  has(run(kase({ status: "ai_drafting" }), [ev(24 * 30, "ai_drafting", "moved to drafting")]), /over the 120h limit/));
+check("drafting far past its limit is critical",
+  run(kase({ status: "ai_drafting" }), [ev(24 * 90, "ai_drafting", "moved to drafting")])
     .some((i) => i.area === "sla" && i.severity === "critical"));
 check("an unknown status is reported rather than ignored",
   has(run(kase({ status: "brand_new_status" }), [ev(1, "x")]), /Unknown case status/));
@@ -225,12 +230,14 @@ const stageCase = (statusV, ageHours) => ({
 });
 const sla = (statusV, ageHours) => checkCaseDetail(stageCase(statusV, ageHours), { status: statusV }).filter((i) => i.area === "sla");
 
-check("drafting at 20 business hours is not flagged", sla("ai_drafting", 20).length === 0);
-check("drafting at 30 business hours warns", (sla("ai_drafting", 30)[0] || {}).severity === "medium");
-check("drafting at 60 business hours breaches", (sla("ai_drafting", 60)[0] || {}).severity === "high");
-check("drafting at 120 business hours is critical", (sla("ai_drafting", 120)[0] || {}).severity === "critical");
-check("case analysis breaches at 80 hours, not 50", sla("profile_review", 50).length && (sla("profile_review", 50)[0] || {}).severity === "medium" && (sla("profile_review", 80)[0] || {}).severity === "high");
-check("the reported figure is the API's own hours", /60 business hours/.test((sla("ai_drafting", 60)[0] || {}).problem || ""));
+check("drafting at 40 business hours is not flagged", sla("ai_drafting", 40).length === 0);
+check("drafting is allowed 4 to 5 days, not 2", STATUS_SLA.ai_drafting.breachHours === 120 && STATUS_SLA.ai_drafting.warnHours === 96);
+check("internal review is allowed 3 to 4 days", STATUS_SLA.internal_review.breachHours === 96 && STATUS_SLA.internal_review.warnHours === 72);
+check("drafting at 100 business hours warns", (sla("ai_drafting", 100)[0] || {}).severity === "medium");
+check("drafting at 130 business hours is late", (sla("ai_drafting", 130)[0] || {}).severity === "high");
+check("drafting at 260 business hours is critical", (sla("ai_drafting", 260)[0] || {}).severity === "critical");
+check("case analysis warns at 50 and is late at 80", (sla("profile_review", 50)[0] || {}).severity === "medium" && (sla("profile_review", 80)[0] || {}).severity === "high");
+check("the reported figure is the API's own hours", /130 business hours/.test((sla("ai_drafting", 130)[0] || {}).problem || ""));
 check("intake has no SLA so no timing finding", sla("intake", 500).length === 0);
 
 // ---- v2: amendments ----
@@ -383,19 +390,54 @@ check("a genuine all-clear still reads as one", (() => {
   return /came back clean/.test(h);
 })());
 
+// ---- momentum: was moving, then stopped ----
+const D2 = 86400000;
+const evAt = (daysAgo) => ({ created_at: new Date(now - daysAgo * D2).toISOString() });
+const mom = (status, days) => checkMomentum({ status }, { events: days.map(evAt) });
+const gap = (status, g) => mom(status, [g, g + 4, g + 8, g + 13]);
+
+check("a case still being worked is not flagged", gap("ai_drafting", 0).length === 0);
+check("a DRAFTING case quiet for 3 days is NOT flagged — that is normal there", gap("ai_drafting", 3).length === 0);
+check("a drafting case quiet for 10 days is flagged", gap("ai_drafting", 10).length === 1);
+check("an INTAKE case quiet for 3 days IS flagged — the client should be moving", gap("intake", 3).length === 1);
+check("internal review gets more room than intake",
+  SETTINGS.MOMENTUM_STOP_DAYS_BY_STAGE.internal_review > SETTINGS.MOMENTUM_STOP_DAYS_BY_STAGE.intake);
+check("drafting gets the most room of all",
+  SETTINGS.MOMENTUM_STOP_DAYS_BY_STAGE.ai_drafting >= 8);
+check("nothing is allowed to sit at ready to file",
+  SETTINGS.MOMENTUM_STOP_DAYS_BY_STAGE.ready_to_file <= 2 && gap("ready_to_file", 3).length === 1);
+check("severity is relative to what is normal for the stage",
+  (gap("ai_drafting", 10)[0] || {}).severity === "medium" && (gap("intake", 10)[0] || {}).severity === "critical");
+check("a case dormant for months is NOT flagged as lost momentum", mom("ai_drafting", [120, 140, 160]).length === 0);
+check("a barely-touched case is not flagged", mom("intake", [10, 60]).length === 0);
+check("a case with no history at all is not flagged", checkMomentum({ status: "intake" }, { events: [] }).length === 0);
+check("the finding says what is normal for the stage", /is normal at this stage/.test((gap("intake", 5)[0] || {}).problem || ""));
+check("momentum has its own risk line", (gap("intake", 5)[0] || {}).risk?.length > 30);
+check("every stage has a silence threshold", (() => {
+  const map = SETTINGS.MOMENTUM_STOP_DAYS_BY_STAGE || {};
+  return Object.keys(STATUS_SLA).every((k) => Number.isFinite(map[k]));
+})());
+check("no single owner can fill the report", SETTINGS.MAX_ITEMS_PER_OWNER > 0 && SETTINGS.MAX_ITEMS_PER_OWNER <= 5);
+
 // ---- report ----
 const html = buildReport({
   ...g1,
   counted: { "Still waiting on the client to submit their intake form": 190 },
   scanned: 559, byStatus: { ai_drafting: 30, internal_review: 12, intake: 42 }, dryRun: true,
 });
-check("the report leads with the escalation", /Escalate — a backlog, not a reminder/.test(html));
-check("the report shows the grouped issue", /Grouped — the same issue/.test(html));
-check("the report shows individual cases", /Individual cases/.test(html));
-check("the routine states appear as counts", /Normal states, for information/.test(html) && /190/.test(html));
+check("the report leads with the backlog", /Plan these/.test(html));
+check("the report shows the grouped issue", /The same problem on several cases/.test(html));
+check("the routine states appear as counts", /Background/.test(html) && /190/.test(html));
+check("a stopped case gets its own section", (() => {
+  const h = buildReport({ escalations: [], grouped: [], singles: [
+    { caseId: "m", caseName: "X", owner: "Y", area: "momentum", severity: "high",
+      problem: "Was moving steadily — 4 updates in the weeks before — then stopped 8 day(s) ago", action: "pick it up", risk: "avoid this" }],
+    counted: {}, scanned: 10, checked: 10, byStatus: {}, dryRun: true });
+  return /Stopped moving/.test(h);
+})());
 check("the escalation sentence is in the report", /backlog this size/.test(html));
-check("the report tells the reader what to do", /<strong>Do:<\/strong>/.test(html));
-check("the report tells the reader what to avoid", /<strong>Avoid:<\/strong>/.test(html));
+check("the report tells the reader what to do", />DO</.test(html));
+check("the report tells the reader what to avoid", />AVOID</.test(html));
 check("the report links to the dashboard", html.includes("petition.hofmigration.com/dashboard"));
 check("the report escapes text", !/<script/i.test(html));
 
