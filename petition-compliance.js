@@ -17,6 +17,7 @@ const checkSla = require("./2-check-sla");
 const checkProcess = require("./3-check-process");
 const checkCaseDetail = require("./5-check-case-detail");
 const checkReview = require("./6-check-review");
+const checkMomentum = require("./8-check-momentum");
 const { group, groupSentence } = require("./7-group");
 const { buildReport, sendReport, caseLink } = require("./4-report");
 
@@ -164,6 +165,35 @@ async function main() {
     });
   }
 
+  // ---- momentum: read the history of every live case, not just the flagged ones ----
+  // A case that stopped moving will not have tripped any filter, which is exactly why
+  // it needs its own pass.
+  if (SETTINGS.CHECK_MOMENTUM) {
+    let pool = [];
+    try { pool = await listCases(); } catch (e) { console.log(`Could not list cases for the momentum pass: ${e.message}`); }
+    pool = pool.filter((c) => !SETTINGS.CLOSED_STATUSES.includes(String(c.status || "").toLowerCase()) && inScope(c));
+    if (SETTINGS.MOMENTUM_MAX_CASES) pool = pool.slice(0, SETTINGS.MOMENTUM_MAX_CASES);
+
+    console.log(`\nMomentum pass: reading the history of ${pool.length} live case(s)...`);
+    const hist = await mapPool(pool, SETTINGS.CONCURRENCY, (c) => caseHistory(c.case_id));
+    let stopped = 0, unreadable = 0;
+    pool.forEach((c, i) => {
+      const h = hist[i];
+      if (!h || h.error) { unreadable++; return; }
+      for (const iss of checkMomentum(c, h)) {
+        stopped++;
+        findings.push({
+          caseId: c.case_id,
+          caseName: c.client_name || c.case_id,
+          stage: STATUS_SLA[c.status]?.phase || c.status,
+          owner: ownerOf(c, iss.owner),
+          area: iss.area, severity: iss.severity, problem: iss.problem, action: iss.action, risk: iss.risk,
+        });
+      }
+    });
+    console.log(`  ${stopped} case(s) were moving and have stopped${unreadable ? `, ${unreadable} history/histories unreadable` : ""}.`);
+  }
+
   // ---- attach the real waiting time to every finding on the case ----
   {
     const hoursByCase = new Map();
@@ -199,17 +229,15 @@ async function main() {
   });
 
   // ---------------------------------------------------------------------
-  // TRIM IT DOWN TO WHAT SOMEBODY CAN ACTUALLY ACT ON
-  // A report of two thousand lines gets ignored, which is worse than no report.
-  //   - routine states are COUNTED, not listed
-  //   - anything below the threshold is COUNTED, not listed
-  //   - each case contributes its WORST issue only
-  //   - a hard cap keeps the list readable no matter what
+  // GROUP FIRST, THEN TRIM
+  // The previous order capped raw findings and then grouped what survived, so one
+  // person's backlog filled every slot and hid everybody else. Grouping first means a
+  // backlog costs one item, not thirty, and the rest of the report gets seen.
   // ---------------------------------------------------------------------
   const INFORMATIONAL = new Set(PROBES.filter((p) => p.informational).map((p) => p.problem.split(" — ")[0]));
   const threshold = RANK[SETTINGS.ITEMISE_FROM] ?? 1;
   const counted = {};
-  const countIt = (f) => { const k = f.problem.split(" — ")[0]; counted[k] = (counted[k] || 0) + 1; };
+  const countIt = (f, n = 1) => { const k = f.problem.split(" — ")[0]; counted[k] = (counted[k] || 0) + n; };
 
   const actionable = [];
   for (const f of all) {
@@ -218,21 +246,45 @@ async function main() {
     actionable.push(f);
   }
 
-  // worst issue per case only
+  // one line per case: keep its worst issue, count the rest
   actionable.sort((a, b) => (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9));
   const perCase = new Map();
-  const itemised = [];
+  const forGrouping = [];
   for (const f of actionable) {
     const n = perCase.get(f.caseId) || 0;
     if (n >= SETTINGS.MAX_PER_CASE) { countIt(f); continue; }
     perCase.set(f.caseId, n + 1);
-    itemised.push(f);
+    forGrouping.push(f);
   }
 
-  const overflow = itemised.length - SETTINGS.MAX_ITEMISED;
-  const unique = itemised.slice(0, SETTINGS.MAX_ITEMISED);
-  if (overflow > 0) counted[`${overflow} further case(s) over the reporting limit`] = overflow;
-  if (tooOld) counted[`Cases created before ${SETTINGS.ONLY_CASES_FROM} (historic backlog)`] = tooOld;
+  const groups = group(forGrouping);
+  let { escalations, grouped, singles } = groups;
+
+  // No one person may fill the report. Their backlog is already one escalation item;
+  // their individual cases beyond the limit are counted instead.
+  const perOwner = new Map();
+  const keptSingles = [];
+  for (const f of singles) {
+    const o = f.owner || "unassigned";
+    const n = perOwner.get(o) || 0;
+    if (n >= SETTINGS.MAX_ITEMS_PER_OWNER) { countIt(f); continue; }
+    perOwner.set(o, n + 1);
+    keptSingles.push(f);
+  }
+  singles = keptSingles;
+
+  // finally, a hard ceiling on ITEMS, worst first
+  const items = [...escalations, ...grouped, ...singles];
+  if (items.length > SETTINGS.MAX_ITEMISED) {
+    const keep = new Set(items.slice(0, SETTINGS.MAX_ITEMISED));
+    const dropped = items.length - SETTINGS.MAX_ITEMISED;
+    escalations = escalations.filter((x) => keep.has(x));
+    grouped = grouped.filter((x) => keep.has(x));
+    singles = singles.filter((x) => keep.has(x));
+    counted[`${dropped} further item(s) beyond the ${SETTINGS.MAX_ITEMISED} shown`] = dropped;
+  }
+
+  const unique = [...singles];
 
   // pipeline snapshot from every live case, not just the flagged ones
   let byStatus = {};
@@ -272,8 +324,6 @@ async function main() {
   }
 
   // ---- report ----
-  // ---- group it: one problem, not fifty tickets ----
-  const { escalations, grouped, singles } = group(unique);
   if (escalations.length) {
     console.log(`\nESCALATE (${escalations.length}) — a backlog, not a reminder:`);
     for (const g of escalations) console.log(`  ${groupSentence(g)}\n     -> ${g.action}`);
