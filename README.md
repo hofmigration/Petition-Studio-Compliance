@@ -108,6 +108,33 @@ For the cases a probe hit, the history is read for the things no filter covers:
 
 Turn this pass off with `READ_TIMELINES: false` if you want a faster run.
 
+## The case that was moving and stopped
+
+In this caseload most cases are old — 188 have been static for over two weeks — so
+"stuck" is the baseline and says nothing. What is abnormal is a case that was genuinely
+**progressing** and then went silent: several updates in the recent past, then nothing.
+
+**How long silence is normal depends entirely on the stage.** Drafting is heads-down work
+where over a week can pass with nothing logged; a case at Ready to File should not sit for
+two days. One threshold everywhere flagged writers mid-draft, which was wrong.
+
+| Stage | Silence that is normal |
+|---|---|
+| Ready to File · Case Analysis (initial reading) | 2 days |
+| Onboarding · Writer Assignment & Case Analysis · Forms | 3 days |
+| Advanced Review / Brainstorm | 5 days |
+| Internal Review | 6 days |
+| **Drafting** | **8 days** |
+
+Severity is **relative to that stage**: twice the normal silence is high, three times is
+critical. A drafting case quiet for 10 days is a nudge; an intake case quiet for 10 days
+is critical.
+
+
+A case dormant for months does **not** qualify — there was no momentum to lose, and it
+is counted as backlog instead. The history of every live case is read for this, not just
+the flagged ones, because a case that stopped will not have tripped any filter.
+
 ## One problem, not fifty tickets
 
 A run once produced **37 identical "brainstorm overdue" criticals, all against one
@@ -139,6 +166,11 @@ today** is listed case by case; everything else is counted.
 | **Listed, one line per case** | severity **high and critical** only, and each case contributes its **worst issue only** |
 | **Counted, not listed** | normal states — waiting on an intake form, a client yet to approve, an audit two days old, a weak verdict. Real, but not failures |
 | **Hard cap** | **30 items**, so the report is always readable |
+| **Per person** | at most **3 individual cases each**, so one person's backlog cannot fill the report and hide everybody else |
+
+**Grouping happens before the cap.** The first version capped raw findings and then
+grouped what survived, so one backlog took every slot and 531 findings were cut off
+unseen. Grouping first means a backlog costs one item, not thirty.
 | **Date cut-off** | **off by default.** Switching it on once set aside all 561 live cases and produced a green "nothing needs action" report while nothing had been checked. Only use `ONLY_CASES_FROM` if you know the dates on the data. |
 
 Tighten further with `ITEMISE_FROM: "critical"`, or change `ONLY_CASES_FROM`,
