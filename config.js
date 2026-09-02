@@ -69,14 +69,23 @@ const isTrainee = (name) => { const p = staffFor(name); return !!(p && p.trainee
 // null       -> client dependent, chased on a cadence instead (see CHASE)
 // ---------------------------------------------------------------------------
 const STATUS_SLA = {
-  intake:            { phase: "1. Onboarding & Documents",      warnHours: null, breachHours: null, owner: "case_manager" },
-  ai_reading:        { phase: "2. Case Analysis (AI reading)",  warnHours: 12,   breachHours: 24,   owner: "petition_writer" },
-  profile_review:    { phase: "2. Writer Assignment & Case Analysis", warnHours: 48, breachHours: 72, owner: "petition_writer" },
-  advanced_review:   { phase: "3. Advanced Review / Brainstorm", warnHours: 48,  breachHours: 72,   owner: "petition_writer" },
-  ai_drafting:       { phase: "4. Drafting",                    warnHours: 24,   breachHours: 48,   owner: "petition_writer" },
-  internal_review:   { phase: "5. Internal Review",             warnHours: 24,   breachHours: 48,   owner: "reviewer" },
-  forms:             { phase: "6. Forms",                       warnHours: 24,   breachHours: 48,   owner: "forms_specialist" },
-  ready_to_file:     { phase: "7. Finalization",                warnHours: 12,   breachHours: 24,   owner: "case_manager" },
+  // UNITS MATTER HERE. The API counts age_hours in business hours with Sundays
+  // excluded — so a counted "day" is roughly 24 hours, and 48 hours is TWO DAYS, not
+  // two working days of effort. The workflow's figures translate as:
+  //   Case Analysis      48-72 hours   = 2-3 days
+  //   Drafting           4-5 days      = 96-120 hours   (NOT 48h; that was wrong)
+  //   Internal Review    3-4 days      = 72-96 hours    (NOT 48h; that was wrong)
+  //   Finalization       1 business day= 24 hours
+  intake:            { phase: "1. Onboarding & Documents",           warnHours: null, breachHours: null, owner: "case_manager" },
+  ai_reading:        { phase: "2. Case Analysis (initial reading)",  warnHours: 12,   breachHours: 24,   owner: "petition_writer" },
+  profile_review:    { phase: "2. Writer Assignment & Case Analysis",warnHours: 48,   breachHours: 72,   owner: "petition_writer" },
+  // The brainstorm depends on the client, so this stage is given room. The probes
+  // (unconfirmed, not booked, overdue) are what actually police it.
+  advanced_review:   { phase: "3. Advanced Review / Brainstorm",     warnHours: 96,   breachHours: 144,  owner: "brainstorm_specialist" },
+  ai_drafting:       { phase: "4. Drafting",                         warnHours: 96,   breachHours: 120,  owner: "petition_writer" },
+  internal_review:   { phase: "5. Internal Review",                  warnHours: 72,   breachHours: 96,   owner: "reviewer" },
+  forms:             { phase: "6. Forms",                            warnHours: 48,   breachHours: 72,   owner: "forms_specialist" },
+  ready_to_file:     { phase: "7. Finalization",                     warnHours: 12,   breachHours: 24,   owner: "case_manager" },
 };
 
 // Client-dependent stages have no SLA, so the team is measured on THEIR action.
@@ -290,6 +299,30 @@ const SETTINGS = {
   // A case with no event at all for this long is stalled, whatever its status.
   STALLED_AFTER_DAYS: 7,
 
+  // ---- MOMENTUM: the case that was moving and stopped ----
+  // In this caseload most cases are old, so "stuck" is normal and says nothing. A case
+  // that was actively progressing and then went silent is the real signal.
+  CHECK_MOMENTUM: true,
+  MOMENTUM_LOOKBACK_DAYS: 30,   // the window judged for "was it moving"
+  MOMENTUM_MIN_EVENTS: 3,       // this many updates in that window counts as moving
+  MOMENTUM_MAX_GAP_DAYS: 60,    // silent longer than this is old backlog, not lost momentum
+  MOMENTUM_MAX_CASES: 700,      // history is read for this many live cases per run
+
+  // How long silence is NORMAL depends entirely on the stage. Drafting is heads-down
+  // work where days pass with nothing logged; intake should show client activity within
+  // days. Using one threshold everywhere flagged writers mid-draft, which was wrong.
+  MOMENTUM_STOP_DAYS_BY_STAGE: {
+    intake:          3,
+    ai_reading:      2,
+    profile_review:  3,
+    advanced_review: 5,   // waiting on the client for a brainstorm slot
+    ai_drafting:     8,   // a writer can legitimately be heads-down for over a week
+    internal_review: 6,
+    forms:           3,
+    ready_to_file:   2,   // nothing should sit here
+  },
+  MOMENTUM_STOP_DAYS: 5,        // fallback for a stage not listed above
+
   // ---- GROUPING: one problem, not fifty tickets ----
   // A run once produced 37 identical "brainstorm overdue" criticals, all belonging to
   // one person. That is not 37 failures, it is one backlog. Findings that share the
@@ -298,6 +331,9 @@ const SETTINGS = {
   CLUSTER_MIN: 4,          // same owner + same issue, this many or more -> one grouped item
   ESCALATE_MIN: 8,         // a group this big is a systemic problem, escalated
   CLUSTER_SHOW_CASES: 5,   // example cases named inside a group (the oldest first)
+  // No single person may fill the report. One backlog once took every slot and hid
+  // everybody else's problems behind it.
+  MAX_ITEMS_PER_OWNER: 3,
 
   // ---- HOW MUCH IS REPORTED ----
   // A report of two thousand findings is not a report. Only things that need somebody
